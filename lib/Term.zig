@@ -46,6 +46,10 @@ pub fn init(self: *Self, ur: UserRender) !void {
     self.stdout = io.bufferedWriter(self.tty.writer());
 }
 
+pub fn deinit(self: *Self) void {
+    self.tty.close();
+}
+
 pub fn nextEvent(self: *Self) !?Event {
     var buffer: [1]u8 = undefined;
     const bytes_read = try self.tty.read(&buffer);
@@ -99,10 +103,6 @@ pub fn nextEvent(self: *Self) !?Event {
     for (chars) |char| if (buffer[0] == char) return Event{ .ctrl = char };
 
     return Event{ .ascii = buffer[0] };
-}
-
-pub fn deinit(self: *Self) void {
-    self.tty.close();
 }
 
 /// Enter raw mode.
@@ -164,7 +164,6 @@ pub fn uncook(self: *Self) !void {
     const writer = self.stdout.writer();
     defer self.stdout.flush() catch {};
 
-    try escape.hideCursor(writer);
     try escape.enterAlt(writer);
     try escape.enableKittyKeyboard(writer);
     try escape.overwriteMode(writer);
@@ -216,24 +215,45 @@ pub fn updateContent(self: *Self) !void {
     try escape.endSync(writer);
 }
 
+/// Clears all content.
+pub fn clear(self: *Self) !void {
+    const writer = self.stdout.writer();
+    try escape.clear(writer);
+}
+
+/// Move the cursor to the specified cell.
 pub fn moveCursorTo(self: *Self, row: usize, col: usize) !void {
     const writer = self.stdout.writer();
     try escape.moveCursor(writer, row, col);
 }
 
+/// Hide the cursor.
+pub fn hideCursor(self: *Self) !void {
+    const writer = self.stdout.writer();
+    try escape.hideCursor(writer);
+}
+
+/// Show the cursor.
+pub fn showCursor(self: *Self) !void {
+    const writer = self.stdout.writer();
+    try escape.showCursor(writer);
+}
+
+/// Set the text attributes for all following writes.
 pub fn setAttribute(self: *Self, attr: Attribute) !void {
     const writer = self.stdout.writer();
     try attr.dump(writer);
 }
 
-pub fn fill(self: *Self, n: usize, char: u8) !void {
+/// Write a byte N times.
+pub fn writeByteNTimes(self: *Self, byte: u8, n: usize) !void {
     const writer = self.stdout.writer();
-    try writer.writeByteNTimes(char, n);
+    try writer.writeByteNTimes(byte, n);
 }
 
-/// Use writer to write at most `width` of `bytes`, abbreviating with '…' if
-/// necessary. If the amount of written codepoints is less than `width`, returns
-/// the difference, otherwise 0.
+/// Write at most `width` of `bytes`, abbreviating with '…' if necessary. If the
+/// amount of written codepoints is less than `width`, returns the difference,
+/// otherwise 0.
 pub fn writeLine(self: *Self, width: usize, bytes: []const u8) !usize {
     const writer = self.stdout.writer();
 

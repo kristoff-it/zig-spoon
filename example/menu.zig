@@ -30,6 +30,8 @@ pub fn main() !void {
     try term.uncook();
     defer term.cook() catch {};
 
+    try term.hideCursor();
+
     try term.fetchSize();
     try term.updateContent();
 
@@ -40,10 +42,12 @@ pub fn main() !void {
 }
 
 fn render(_: *spoon.Term, _: usize, columns: usize) !void {
+    try term.clear();
+
     try term.moveCursorTo(0, 0);
     try term.setAttribute(.{ .fg = .green, .reverse = true });
     const rest = try term.writeLine(columns, " Spoon example program: menu");
-    try term.fill(rest, ' ');
+    try term.writeByteNTimes(' ', rest);
 
     try term.moveCursorTo(1, 1);
     try term.setAttribute(.{ .fg = .red, .bold = true });
