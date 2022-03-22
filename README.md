@@ -7,6 +7,9 @@ want to render the interface.
 
 zig-spoon supports the kitty keyboard protocol.
 
+The text attribute code can be used independently, so zig-spoon is also useful
+for non-TUI terminal programs that still want fancy text.
+
 ```
     _
   /   \
