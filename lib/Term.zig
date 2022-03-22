@@ -14,8 +14,8 @@ const unicode = std.unicode;
 
 const Attribute = @import("Attribute.zig");
 const Event = @import("event.zig").Event;
-const escape = @import("escape.zig");
-const escape_key_codes = @import("key-codes.zig").escape_key_codes;
+const spells = @import("spells.zig");
+const key_codes = @import("key-codes.zig").key_codes;
 
 pub const UserRender = fn (self: *Self, rows: usize, columns: usize) anyerror!void;
 
@@ -65,7 +65,7 @@ pub fn nextEvent(self: *Self) !?Event {
         // of read bytes.
         //
         // However if the terminal supports kitty mode, this should never
-        // never timeout as the escape key also sends an escape sequence, not
+        // never timeout as the spells key also sends an escape sequence, not
         // just the escape character. Luckily the timeout does not mess with
         // kitty mode, so we can use the same code to handle both kitty and
         // legacy.
@@ -86,12 +86,12 @@ pub fn nextEvent(self: *Self) !?Event {
         //      keypress in legacy mode that is not part of an escape sequence,
         //      simply because the minimum available timeout you can set via
         //      termios is 100ms, which is pretty long. Some TUI software
-        //      managed to detect the escape key despite this and we should
+        //      managed to detect the spells key despite this and we should
         //      probably do the same. However this is a low priority goal, as
         //      this problem does not occur when using kitty keyboard mode.
 
         if (esc_read == 0) return .escape;
-        return escape_key_codes.get(esc_buffer[0..esc_read]) orelse .unknown;
+        return key_codes.get(esc_buffer[0..esc_read]) orelse .unknown;
     }
 
     // Legacy codes for Ctrl-[a-z]. This is missing 'm', as that would match Enter.
@@ -164,12 +164,16 @@ pub fn uncook(self: *Self) !void {
     const writer = self.stdout.writer();
     defer self.stdout.flush() catch {};
 
-    try escape.enterAlt(writer);
-    try escape.enableKittyKeyboard(writer);
-    try escape.overwriteMode(writer);
-    try escape.resetAutoWrap(writer);
-    try escape.resetAutoRepeat(writer);
-    try escape.resetAutoInterlace(writer);
+    try writer.writeAll(spells.save_cursor_position);
+    try writer.writeAll(spells.save_cursor_position);
+    try writer.writeAll(spells.enter_alt_buffer);
+
+    try writer.writeAll(spells.enable_kitty_keyboard);
+
+    try writer.writeAll(spells.overwrite_mode);
+    try writer.writeAll(spells.reset_auto_wrap);
+    try writer.writeAll(spells.reset_auto_repeat);
+    try writer.writeAll(spells.reset_auto_interlace);
 }
 
 /// Enter cooked mode.
@@ -180,11 +184,16 @@ pub fn cook(self: *Self) !void {
     const writer = self.stdout.writer();
     defer self.stdout.flush() catch {};
 
-    try escape.clear(writer);
-    try escape.disableKittyKeyboard(writer);
-    try escape.leaveAlt(writer);
-    try escape.showCursor(writer);
-    try escape.attributeReset(writer);
+    try writer.writeAll(spells.disable_kitty_keyboard);
+
+    try writer.writeAll(spells.clear);
+    try writer.writeAll(spells.leave_alt_buffer);
+    try writer.writeAll(spells.restore_screen);
+    try writer.writeAll(spells.restore_cursor_position);
+
+    try writer.writeAll(spells.show_cursor);
+    try writer.writeAll(spells.reset_attributes);
+    try writer.writeAll(spells.reset_attributes);
 
     try os.tcsetattr(self.tty.handle, .FLUSH, self.cooked_termios);
 }
@@ -207,36 +216,36 @@ pub fn updateContent(self: *Self) !void {
     const writer = self.stdout.writer();
     defer self.stdout.flush() catch {};
 
-    try escape.startSync(writer);
-    try escape.attributeReset(writer);
+    try writer.writeAll(spells.start_sync);
+    try writer.writeAll(spells.reset_attributes);
 
     try @call(.{}, self.user_render, .{ self, self.height, self.width });
 
-    try escape.endSync(writer);
+    try writer.writeAll(spells.end_sync);
 }
 
 /// Clears all content.
 pub fn clear(self: *Self) !void {
     const writer = self.stdout.writer();
-    try escape.clear(writer);
+    try writer.writeAll(spells.clear);
 }
 
 /// Move the cursor to the specified cell.
 pub fn moveCursorTo(self: *Self, row: usize, col: usize) !void {
     const writer = self.stdout.writer();
-    try escape.moveCursor(writer, row, col);
+    _ = try writer.print(spells.move_cursor_fmt, .{ row + 1, col + 1 });
 }
 
 /// Hide the cursor.
 pub fn hideCursor(self: *Self) !void {
     const writer = self.stdout.writer();
-    try escape.hideCursor(writer);
+    try writer.writeAll(spells.hide_cursor);
 }
 
 /// Show the cursor.
 pub fn showCursor(self: *Self) !void {
     const writer = self.stdout.writer();
-    try escape.showCursor(writer);
+    try writer.writeAll(spells.show_cursor);
 }
 
 /// Set the text attributes for all following writes.

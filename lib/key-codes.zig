@@ -8,7 +8,7 @@ const std = @import("std");
 const Event = @import("event.zig").Event;
 
 /// The various escape sequences that represent special keys.
-pub const escape_key_codes = blk: {
+pub const key_codes = blk: {
     @setEvalBranchQuota(5000);
     break :blk std.ComptimeStringMap(
         Event,
