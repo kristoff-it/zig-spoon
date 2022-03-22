@@ -260,10 +260,10 @@ pub fn writeByteNTimes(self: *Self, byte: u8, n: usize) !void {
     try writer.writeByteNTimes(byte, n);
 }
 
-/// Write at most `width` of `bytes`, abbreviating with '…' if necessary. If the
-/// amount of written codepoints is less than `width`, returns the difference,
-/// otherwise 0.
-pub fn writeLine(self: *Self, width: usize, bytes: []const u8) !usize {
+/// Write at most `max_width` of `bytes`, abbreviating with '…' if necessary.
+/// If the amount of written codepoints is less than `width`, returns the
+/// difference, otherwise 0.
+pub fn writeLine(self: *Self, max_width: usize, bytes: []const u8) !usize {
     const writer = self.stdout.writer();
 
     var view = unicode.Utf8View.init(bytes) catch {
@@ -271,15 +271,15 @@ pub fn writeLine(self: *Self, width: usize, bytes: []const u8) !usize {
         // view are not uncommon. Treating those bytes as u8 chars is definitely
         // wrong, but better than crashing or displaying nothing.
         // TODO properly handle unicode
-        return try writeLineNoUnicode(writer, width, bytes);
+        return try writeLineNoUnicode(writer, max_width, bytes);
     };
 
     var written: usize = 0;
     var it = view.iterator();
     while (it.nextCodepointSlice()) |cp| : (written += 1) {
-        if (written == width) {
+        if (written == max_width) {
             return 0;
-        } else if (written == width - 1) {
+        } else if (written == max_width - 1) {
             // We only have room for one more codepoint. Look ahead to see if we
             // need to draw '…'.
             if (it.nextCodepointSlice()) |_| {
@@ -292,17 +292,17 @@ pub fn writeLine(self: *Self, width: usize, bytes: []const u8) !usize {
             try writeCodePoint(writer, cp);
         }
     }
-    return width - written;
+    return max_width - written;
 }
 
-fn writeLineNoUnicode(writer: anytype, width: usize, bytes: []const u8) !usize {
-    if (bytes.len > width) {
-        for (bytes[0 .. width - 1]) |char| try writeAscii(writer, char);
+fn writeLineNoUnicode(writer: anytype, max_width: usize, bytes: []const u8) !usize {
+    if (bytes.len > max_width) {
+        for (bytes[0 .. max_width - 1]) |char| try writeAscii(writer, char);
         try writer.writeAll("…");
         return 0;
     } else {
         for (bytes) |char| try writeAscii(writer, char);
-        return width - bytes.len;
+        return max_width - bytes.len;
     }
 }
 
