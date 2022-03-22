@@ -65,7 +65,7 @@ pub fn nextEvent(self: *Self) !?Event {
         // of read bytes.
         //
         // However if the terminal supports kitty mode, this should never
-        // never timeout as the spells key also sends an escape sequence, not
+        // never timeout as the escape key also sends an escape sequence, not
         // just the escape character. Luckily the timeout does not mess with
         // kitty mode, so we can use the same code to handle both kitty and
         // legacy.
@@ -86,7 +86,7 @@ pub fn nextEvent(self: *Self) !?Event {
         //      keypress in legacy mode that is not part of an escape sequence,
         //      simply because the minimum available timeout you can set via
         //      termios is 100ms, which is pretty long. Some TUI software
-        //      managed to detect the spells key despite this and we should
+        //      managed to detect the escape key despite this and we should
         //      probably do the same. However this is a low priority goal, as
         //      this problem does not occur when using kitty keyboard mode.
 
