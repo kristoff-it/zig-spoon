@@ -16,7 +16,8 @@ const Attribute = @import("Attribute.zig");
 const Event = @import("event.zig").Event;
 const escape = @import("escape.zig");
 const escape_key_codes = @import("key-codes.zig").escape_key_codes;
-const UserRender = @import("user-decl-types.zig").UserRender;
+
+pub const UserRender = fn (self: *Self, rows: usize, columns: usize) anyerror!void;
 
 const Self = @This();
 
