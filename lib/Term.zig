@@ -199,6 +199,7 @@ pub fn cook(self: *Self) !void {
 }
 
 pub fn fetchSize(self: *Self) !void {
+    if (self.cooked) return;
     var size = mem.zeroes(os.system.winsize);
     const err = os.system.ioctl(self.tty.handle, os.system.T.IOCGWINSZ, @ptrToInt(&size));
     if (os.errno(err) != .SUCCESS) {
@@ -260,6 +261,14 @@ pub fn setAttribute(self: *Self, attr: Attribute) !void {
 pub fn writeByteNTimes(self: *Self, byte: u8, n: usize) !void {
     const writer = self.stdout.writer();
     try writer.writeByteNTimes(byte, n);
+}
+
+/// Write all bytes, wrapping at the end of the line.
+pub fn writeAllWrapping(self: *Self, bytes: []const u8) !usize {
+    const writer = self.stdout.writer();
+    try writer.writeAll(spells.enable_auto_wrap);
+    try writer.writeAll(bytes);
+    try writer.writeAll(spells.reset_auto_wrap);
 }
 
 /// Write at most `max_width` of `bytes`, abbreviating with '…' if necessary.
