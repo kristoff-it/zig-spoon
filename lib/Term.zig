@@ -258,7 +258,7 @@ pub fn setAttribute(self: *Self, attr: Attribute) !void {
 }
 
 /// Write byte.
-pub fn writeByte(self: *Self, byte: u8) !usize {
+pub fn writeByte(self: *Self, byte: u8) !void {
     const writer = self.stdout.writer();
     try writer.writeByte(byte);
 }
@@ -270,13 +270,13 @@ pub fn writeByteNTimes(self: *Self, byte: u8, n: usize) !void {
 }
 
 /// Write all bytes.
-pub fn writeAll(self: *Self, bytes: []const u8) !usize {
+pub fn writeAll(self: *Self, bytes: []const u8) !void {
     const writer = self.stdout.writer();
     try writer.writeAll(bytes);
 }
 
 /// Write all bytes, wrapping at the end of the line.
-pub fn writeAllWrapping(self: *Self, bytes: []const u8) !usize {
+pub fn writeAllWrapping(self: *Self, bytes: []const u8) !void {
     const writer = self.stdout.writer();
     try writer.writeAll(spells.enable_auto_wrap);
     try writer.writeAll(bytes);
