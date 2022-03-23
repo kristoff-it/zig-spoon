@@ -209,6 +209,8 @@ pub fn fetchSize(self: *Self) !void {
 }
 
 pub fn updateContent(self: *Self) !void {
+    if (self.cooked) return;
+
     // Yes that's right, we write directly to stdout, not to a back buffer.
     // Thanks to the sync escape sequence, there should be no flickering
     // regardless. This makes spoon a lot more efficient, with the slight caveat
