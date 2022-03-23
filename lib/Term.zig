@@ -257,10 +257,22 @@ pub fn setAttribute(self: *Self, attr: Attribute) !void {
     try attr.dump(writer);
 }
 
+/// Write byte.
+pub fn writeByte(self: *Self, byte: u8) !usize {
+    const writer = self.stdout.writer();
+    try writer.writeByte(byte);
+}
+
 /// Write a byte N times.
 pub fn writeByteNTimes(self: *Self, byte: u8, n: usize) !void {
     const writer = self.stdout.writer();
     try writer.writeByteNTimes(byte, n);
+}
+
+/// Write all bytes.
+pub fn writeAll(self: *Self, bytes: []const u8) !usize {
+    const writer = self.stdout.writer();
+    try writer.writeAll(bytes);
 }
 
 /// Write all bytes, wrapping at the end of the line.
