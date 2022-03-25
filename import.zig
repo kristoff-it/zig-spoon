@@ -6,6 +6,8 @@
 
 pub const version = "0.1.0";
 
+pub const spells = @import("lib/spells.zig");
+
 pub const Attribute = @import("lib/Attribute.zig");
 pub const Event = @import("lib/event.zig").Event;
 pub const Term = @import("lib/Term.zig");
