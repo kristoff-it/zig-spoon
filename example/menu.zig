@@ -68,7 +68,11 @@ fn menuEntry(name: []const u8, row: usize, width: usize) !void {
 fn handleUiEvents() !void {
     while (loop) {
         if (try term.nextEvent()) |ev| {
-            switch (ev) {
+            switch (ev.key) {
+                .escape => {
+                    loop = false;
+                    return;
+                },
                 .ascii => |key| {
                     if (key == 'q') {
                         loop = false;

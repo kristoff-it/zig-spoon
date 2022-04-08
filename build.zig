@@ -17,6 +17,14 @@ pub fn build(b: *Builder) void {
     }
 
     {
+        const exe = b.addExecutable("keyprint", "example/keyprint.zig");
+        exe.setTarget(target);
+        exe.setBuildMode(mode);
+        exe.addPackagePath("spoon", "import.zig");
+        exe.install();
+    }
+
+    {
         const exe = b.addExecutable("colours", "example/colours.zig");
         exe.setTarget(target);
         exe.setBuildMode(mode);

@@ -15,7 +15,7 @@ const unicode = std.unicode;
 const Attribute = @import("Attribute.zig");
 const Event = @import("event.zig").Event;
 const spells = @import("spells.zig");
-const key_codes = @import("key-codes.zig").key_codes;
+const key_codes = @import("key-codes.zig");
 
 pub const UserRender = fn (self: *Self, rows: usize, columns: usize) anyerror!void;
 
@@ -51,58 +51,17 @@ pub fn deinit(self: *Self) void {
 }
 
 pub fn nextEvent(self: *Self) !?Event {
-    var buffer: [1]u8 = undefined;
+    var buffer: [16]u8 = undefined;
     const bytes_read = try self.tty.read(&buffer);
     if (bytes_read == 0) return null;
-
     if (buffer[0] == '\x1B') {
-        // Oh no, an escape sequence! Let's try to read the rest of it.
-        // Here we do not want the read syscall to immediately return, because
-        // the rest of the escape sequence might not have been send yet.
-        // Since however it is not actually guaranteed that there are additional
-        // bytes and since escape sequences can have different lengths, we
-        // tune read to return after a timeout instead of after a minimum amount
-        // of read bytes.
-        //
-        // However if the terminal supports kitty mode, this should never
-        // never timeout as the escape key also sends an escape sequence, not
-        // just the escape character. Luckily the timeout does not mess with
-        // kitty mode, so we can use the same code to handle both kitty and
-        // legacy.
-        var termios = try os.tcgetattr(self.tty.handle);
-        termios.cc[os.system.V.TIME] = 1;
-        termios.cc[os.system.V.MIN] = 0;
-        try os.tcsetattr(self.tty.handle, .NOW, termios);
-
-        var esc_buffer: [8]u8 = undefined;
-        const esc_read = try self.tty.read(&esc_buffer);
-
-        termios.cc[os.system.V.TIME] = 0;
-        termios.cc[os.system.V.MIN] = 0;
-
-        try os.tcsetattr(self.tty.handle, .NOW, termios);
-
-        // TODO It can easiely happen that we accidentally swallow another
-        //      keypress in legacy mode that is not part of an escape sequence,
-        //      simply because the minimum available timeout you can set via
-        //      termios is 100ms, which is pretty long. Some TUI software
-        //      managed to detect the escape key despite this and we should
-        //      probably do the same. However this is a low priority goal, as
-        //      this problem does not occur when using kitty keyboard mode.
-
-        if (esc_read == 0) return .escape;
-        return key_codes.get(esc_buffer[0..esc_read]) orelse .unknown;
+        if (bytes_read == 1) return Event{ .key = .escape };
+        if (key_codes.legacyEscapeSequence(buffer[1..bytes_read])) |ev| return ev;
+        if (key_codes.kittyEscapeSeqeunce(buffer[1..bytes_read])) |ev| return ev;
+        return Event{ .key = .unknown };
     }
-
-    // Legacy codes for Ctrl-[a-z]. This is missing 'm', as that would match Enter.
-    const chars = comptime blk: {
-        var chars = [_]u8{ 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w' };
-        for (chars) |*ch| ch.* &= '\x1f';
-        break :blk chars;
-    };
-    for (chars) |char| if (buffer[0] == char) return Event{ .ctrl = char };
-
-    return Event{ .ascii = buffer[0] };
+    if (key_codes.legacyCtrlCode(buffer[0])) |ev| return ev;
+    return Event{ .key = .{ .ascii = buffer[0] } };
 }
 
 /// Enter raw mode.
