@@ -40,10 +40,22 @@ pub fn main() !void {
     }
 }
 
-fn render(_: *spoon.Term, _: usize, _: usize) !void {
+fn render(_: *spoon.Term, _: usize, columns: usize) !void {
     try term.clear();
+
     try term.moveCursorTo(0, 0);
-    try term.writeAll("key: ");
+    try term.setAttribute(.{ .fg = .green, .reverse = true });
+    const rest = try term.writeLine(columns, " Spoon example program: keyprint");
+    try term.writeByteNTimes(' ', rest);
+
+    try term.moveCursorTo(1, 1);
+    try term.setAttribute(.{ .fg = .red, .bold = true });
+    _ = try term.writeLine(columns - 1, "Key and modifier demo/tester, q to exit.");
+
+    try term.moveCursorTo(3, 3);
+    try term.setAttribute(.{ .bold = true });
+    try term.writeAll("      key: ");
+    try term.setAttribute(.{});
     if (last_event.key == .ascii) {
         switch (last_event.key.ascii) {
             127 => try term.writeAll("backspace"),
@@ -58,11 +70,13 @@ fn render(_: *spoon.Term, _: usize, _: usize) !void {
     } else {
         try term.writeAll(@tagName(last_event.key));
     }
-    try term.moveCursorTo(1, 0);
+
+    try term.moveCursorTo(4, 3);
+    try term.setAttribute(.{ .bold = true });
     try term.writeAll("modifiers: ");
+    try term.setAttribute(.{});
     if (last_event.mod_alt) try term.writeAll("alt ");
     if (last_event.mod_ctrl) try term.writeAll("ctrl");
-    try term.writeByte('\n');
 }
 
 fn handleUiEvents() !void {
