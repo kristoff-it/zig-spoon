@@ -35,9 +35,35 @@ pub fn main() !void {
     try term.fetchSize();
     try term.updateContent();
 
+    var buf: [16]u8 = undefined;
     while (loop) {
         _ = try os.poll(&fds, -1);
-        try handleUiEvents();
+
+        const read = try term.readInput(&buf);
+        var it = spoon.inputParser(buf[0..read]);
+        while (it.next()) |in| {
+            switch (in.content) {
+                .escape => {
+                    loop = false;
+                    break;
+                },
+                .codepoint => |cp| {
+                    if (cp == 'q') loop = false;
+                    break;
+                },
+                .arrow_down => {
+                    if (cursor < 3) {
+                        cursor += 1;
+                        try term.updateContent();
+                    }
+                },
+                .arrow_up => {
+                    cursor -|= 1;
+                    try term.updateContent();
+                },
+                else => {},
+            }
+        }
     }
 }
 
@@ -63,38 +89,6 @@ fn menuEntry(name: []const u8, row: usize, width: usize) !void {
     try term.moveCursorTo(row, 2);
     try term.setAttribute(.{ .fg = .blue, .reverse = (cursor == row - 3) });
     _ = try term.writeLine(width - 2, name);
-}
-
-fn handleUiEvents() !void {
-    while (loop) {
-        if (try term.nextEvent()) |ev| {
-            switch (ev.key) {
-                .escape => {
-                    loop = false;
-                    return;
-                },
-                .ascii => |key| {
-                    if (key == 'q') {
-                        loop = false;
-                        return;
-                    }
-                },
-                .arrow_down => {
-                    if (cursor < 3) {
-                        cursor += 1;
-                        try term.updateContent();
-                    }
-                },
-                .arrow_up => {
-                    cursor -|= 1;
-                    try term.updateContent();
-                },
-                else => {},
-            }
-        } else {
-            break;
-        }
-    }
 }
 
 fn handleSigWinch(_: c_int) callconv(.C) void {

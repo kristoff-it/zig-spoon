@@ -13,9 +13,7 @@ const os = std.os;
 const unicode = std.unicode;
 
 const Attribute = @import("Attribute.zig");
-const Event = @import("event.zig").Event;
 const spells = @import("spells.zig");
-const key_codes = @import("key-codes.zig");
 
 pub const UserRender = fn (self: *Self, rows: usize, columns: usize) anyerror!void;
 
@@ -50,18 +48,8 @@ pub fn deinit(self: *Self) void {
     self.tty.close();
 }
 
-pub fn nextEvent(self: *Self) !?Event {
-    var buffer: [16]u8 = undefined;
-    const bytes_read = try self.tty.read(&buffer);
-    if (bytes_read == 0) return null;
-    if (buffer[0] == '\x1B') {
-        if (bytes_read == 1) return Event{ .key = .escape };
-        if (key_codes.legacyEscapeSequence(buffer[1..bytes_read])) |ev| return ev;
-        if (key_codes.kittyEscapeSeqeunce(buffer[1..bytes_read])) |ev| return ev;
-        return Event{ .key = .unknown };
-    }
-    if (key_codes.legacyCtrlCode(buffer[0])) |ev| return ev;
-    return Event{ .key = .{ .ascii = buffer[0] } };
+pub fn readInput(self: *Self, buffer: []u8) !usize {
+    return try self.tty.read(buffer);
 }
 
 /// Enter raw mode.

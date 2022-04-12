@@ -5,8 +5,11 @@ pub fn build(b: *Builder) void {
     const target = b.standardTargetOptions(.{});
     const mode = b.standardReleaseOptions();
 
-    // TODO write man page
-    //b.installFile("doc/nfm.1", "share/man/man1/nfm.1");
+    const tests = b.addTest("test_main.zig");
+    tests.setTarget(target);
+    tests.setBuildMode(mode);
+    const test_step = b.step("test", "Run all tests");
+    test_step.dependOn(&tests.step);
 
     {
         const exe = b.addExecutable("menu", "example/menu.zig");
@@ -17,7 +20,7 @@ pub fn build(b: *Builder) void {
     }
 
     {
-        const exe = b.addExecutable("keyprint", "example/keyprint.zig");
+        const exe = b.addExecutable("input-demo", "example/input-demo.zig");
         exe.setTarget(target);
         exe.setBuildMode(mode);
         exe.addPackagePath("spoon", "import.zig");

@@ -1,0 +1,19 @@
+image: alpine/edge
+packages:
+  - wget
+  - xz
+sources:
+  - https://git.sr.ht/~leon_plickat/zig-spoon
+tasks:
+  - install_deps: |
+      wget -q https://ziglang.org/download/0.9.1/zig-linux-x86_64-0.9.1.tar.xz
+      tar -xvf zig-linux-x86_64-0.9.1.tar.xz 1>/dev/null
+      sudo mv zig-linux-x86_64-0.9.1/zig /usr/bin/
+      sudo mv zig-linux-x86_64-0.9.1/lib /usr/lib/zig
+  - test: |
+      cd zig-spoon
+      zig build test
+  - fmt: |
+      cd zig-spoon
+      zig fmt --check lib/
+      zig fmt --check build.zig
