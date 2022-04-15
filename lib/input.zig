@@ -9,12 +9,22 @@ const ascii = std.ascii;
 const fmt = std.fmt;
 const unicode = std.unicode;
 
+// Kitty supports a few more modifiers, but these are the ones that actually
+// make sense. Ok, super probably does not make a lot of sense, but complex
+// terminal applications commonly support it, so let's just follow their lead.
+// Why not shift? Because it is not always trivial to detect and because it is
+// not entirely clear how some things should be handled. Should 'A' be parsed
+// into a lowercase 'a' with the Shift modifier or an uppercase 'A' with the
+// Shift modifier or an uppercase 'A' without Shift? No idea. So let's just
+// avoid it for now.
 const kitty_alt = 0b10;
 const kitty_ctrl = 0b100;
+const kitty_super = 0b1000;
 
 pub const Input = struct {
     mod_alt: bool = false,
     mod_ctrl: bool = false,
+    mod_super: bool = false,
     content: InputContent,
 };
 
@@ -218,9 +228,10 @@ const InputParser = struct {
                         'A', 'B', 'C', 'D', 'E', 'F', 'H', 'P', 'Q', 'R', 'S' => {
                             defer self.advanceBufferBy("\x1B[".len + first_num_bytes.len + ";".len + second_num_bytes.len + "A".len);
                             var ev = singleLetterSpecialInput(byte) orelse unreachable;
-                            const modifiers = fmt.parseInt(u16, second_num_bytes, 10) catch return Input{ .content = .unknown };
+                            const modifiers = (fmt.parseInt(u16, second_num_bytes, 10) catch return Input{ .content = .unknown }) - @as(u16, 1);
                             ev.mod_alt = (modifiers & kitty_alt) > 0;
                             ev.mod_ctrl = (modifiers & kitty_ctrl) > 0;
+                            ev.mod_super = (modifiers & kitty_super) > 0;
                             return ev;
                         },
                         else => break,
@@ -258,9 +269,10 @@ const InputParser = struct {
             .{ "24", .{ .content = .{ .function = 12 } } },
         });
         var ev = sequences.get(num) orelse return Input{ .content = .unknown };
-        const modifiers = if (modifiers_str) |md| (fmt.parseInt(u16, md, 10) catch return Input{ .content = .unknown }) else undefined;
+        const modifiers = if (modifiers_str) |md| ((fmt.parseInt(u16, md, 10) catch return Input{ .content = .unknown }) - @as(u16, 1)) else undefined;
         ev.mod_alt = if (modifiers_str) |_| ((modifiers & kitty_alt) > 0) else false;
         ev.mod_ctrl = if (modifiers_str) |_| ((modifiers & kitty_ctrl) > 0) else false;
+        ev.mod_super = if (modifiers_str) |_| ((modifiers & kitty_super) > 0) else false;
         return ev;
     }
 
@@ -271,7 +283,7 @@ const InputParser = struct {
             self.advanceBufferBy(len);
         }
         const codepoint = fmt.parseInt(u21, codepoint_str, 10) catch return Input{ .content = .unknown };
-        const modifiers = if (modifiers_str) |md| (fmt.parseInt(u16, md, 10) catch return Input{ .content = .unknown }) else undefined;
+        const modifiers = if (modifiers_str) |md| ((fmt.parseInt(u16, md, 10) catch return Input{ .content = .unknown }) - @as(u16, 1)) else undefined;
         return Input{
             .content = switch (codepoint) {
                 9 => .{ .codepoint = '\t' },
@@ -298,6 +310,7 @@ const InputParser = struct {
             },
             .mod_alt = if (modifiers_str) |_| ((modifiers & kitty_alt) > 0) else false,
             .mod_ctrl = if (modifiers_str) |_| ((modifiers & kitty_ctrl) > 0) else false,
+            .mod_super = if (modifiers_str) |_| ((modifiers & kitty_super) > 0) else false,
         };
     }
 

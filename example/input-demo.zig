@@ -139,6 +139,7 @@ fn render(_: *spoon.Term, _: usize, columns: usize) !void {
             }
             if (in.mod_alt) try writer.writeAll(" +Alt");
             if (in.mod_ctrl) try writer.writeAll(" +Ctrl");
+            if (in.mod_super) try writer.writeAll(" +Super");
         }
     }
 }
