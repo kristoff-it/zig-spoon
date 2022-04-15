@@ -61,17 +61,21 @@ fn render(_: *spoon.Term, _: usize, columns: usize) !void {
     try term.moveCursorTo(3, 1);
     try term.setAttribute(.{ .bold = true });
     if (empty) {
-        _ = try term.writeLine(columns - 1, "Press a key!");
+        _ = try term.writeLine(columns - 1, "Press a key! Or try to paste something!");
     } else {
         const writer = term.stdout.writer();
-        try writer.print("Bytes read: {}", .{read});
+        try writer.writeAll("Bytes read:    ");
+        try term.setAttribute(.{});
+        try writer.print("{}", .{read});
 
         var valid_unicode = true;
         _ = unicode.Utf8View.init(buf[0..read]) catch {
             valid_unicode = false;
         };
         try term.moveCursorTo(4, 1);
+        try term.setAttribute(.{ .bold = true });
         try writer.writeAll("Valid unicode: ");
+        try term.setAttribute(.{});
         if (valid_unicode) {
             try writer.writeAll("yes: \"");
             for (buf[0..read]) |c| {
@@ -113,12 +117,14 @@ fn render(_: *spoon.Term, _: usize, columns: usize) !void {
         }
 
         try term.moveCursorTo(5, 1);
+        try term.setAttribute(.{ .bold = true });
         const msg = "Input events:";
         try writer.writeAll(msg);
         var it = spoon.inputParser(buf[0..read]);
         var i: usize = 1;
+        try term.setAttribute(.{});
         while (it.next()) |in| : (i += 1) {
-            try term.moveCursorTo(5 + (i - 1), msg.len + 2);
+            try term.moveCursorTo(5 + (i - 1), msg.len + 3);
             try writer.print("{}: ", .{i});
             switch (in.content) {
                 .codepoint => |cp| {
