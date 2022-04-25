@@ -194,7 +194,7 @@ pub fn setWindowTitle(self: *Self, title: []const u8) !void {
 /// Move the cursor to the specified cell.
 pub fn moveCursorTo(self: *Self, row: usize, col: usize) !void {
     const writer = self.stdout.writer();
-    _ = try writer.print(spells.move_cursor_fmt, .{ row + 1, col + 1 });
+    try writer.print(spells.move_cursor_fmt, .{ row + 1, col + 1 });
 }
 
 /// Hide the cursor.
