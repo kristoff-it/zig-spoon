@@ -35,6 +35,7 @@ pub fn main() !void {
     try term.hideCursor();
 
     try term.fetchSize();
+    try term.setWindowTitle("zig-spoon example: input-demo");
     try term.updateContent();
 
     while (loop) {

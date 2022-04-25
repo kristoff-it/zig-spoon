@@ -180,6 +180,17 @@ pub fn clear(self: *Self) !void {
     try writer.writeAll(spells.clear);
 }
 
+/// Set window title using OSC 2.
+/// Should not be called inside a rendering function.
+pub fn setWindowTitle(self: *Self, title: []const u8) !void {
+    const writer = self.stdout.writer();
+    defer self.stdout.flush() catch {};
+
+    try writer.writeAll("\x1b]2;");
+    try writer.writeAll(title);
+    try writer.writeAll("\x1b\\");
+}
+
 /// Move the cursor to the specified cell.
 pub fn moveCursorTo(self: *Self, row: usize, col: usize) !void {
     const writer = self.stdout.writer();
