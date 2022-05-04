@@ -106,6 +106,7 @@ const InputParser = struct {
             else => {
                 // The terminal sends us input encoded as utf8.
                 advance = unicode.utf8ByteSequenceLength(self.bytes.?[0]) catch return Input{ .content = .unknown };
+                // TODO check if buffer is long enough
                 const codepoint = unicode.utf8Decode(self.bytes.?[0..advance]) catch return Input{ .content = .unknown };
                 return Input{ .content = .{ .codepoint = codepoint } };
             },
