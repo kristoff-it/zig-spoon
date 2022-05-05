@@ -22,6 +22,8 @@ const kitty_ctrl = 0b100;
 const kitty_super = 0b1000;
 
 pub const Input = struct {
+    pub const fromDescription = @import("input_description.zig").parseInputDescription;
+
     mod_alt: bool = false,
     mod_ctrl: bool = false,
     mod_super: bool = false,
