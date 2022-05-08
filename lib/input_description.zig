@@ -81,6 +81,12 @@ pub fn parseInputDescription(str: []const u8) !Input {
         } else if (mem.eql(u8, buf, "space")) {
             ret.content = .{ .codepoint = ' ' };
             break;
+        } else if (mem.eql(u8, buf, "backspace")) {
+            ret.content = .{ .codepoint = 127 };
+            break;
+        } else if (mem.eql(u8, buf, "enter") or mem.eql(u8, buf, "return")) {
+            ret.content = .{ .codepoint = '\r' };
+            break;
         } else if (buf[0] == 'F') {
             ret.content = .{ .function = fmt.parseInt(u8, buf[1..], 10) catch return error.UnkownBadDescription };
             break;
@@ -180,6 +186,22 @@ test "input description parser: good input" {
         Input{ .content = .escape, .mod_super = true, .mod_alt = true },
         try parseInputDescription("M-S-escape"),
     );
+    try testing.expectEqual(
+        Input{ .content = .{ .codepoint = '\r' }, .mod_super = true },
+        try parseInputDescription("S-return"),
+    );
+    try testing.expectEqual(
+        Input{ .content = .{ .codepoint = 127 } },
+        try parseInputDescription("backspace"),
+    );
+    try testing.expectEqual(
+        Input{ .content = .{ .codepoint = '\xB5' } },
+        try parseInputDescription("µ"),
+    );
+    try testing.expectEqual(
+        Input{ .content = .{ .codepoint = '\xB5' }, .mod_ctrl = true },
+        try parseInputDescription("Ctrl-µ"),
+    );
 }
 
 test "input description parser: bad input" {
@@ -191,4 +213,5 @@ test "input description parser: bad input" {
     try testing.expectError(error.UnkownBadDescription, parseInputDescription("aa"));
     try testing.expectError(error.UnkownBadDescription, parseInputDescription("a-a"));
     try testing.expectError(error.UnkownBadDescription, parseInputDescription("escap"));
+    try testing.expectError(error.UnkownBadDescription, parseInputDescription("\xB5"));
 }
