@@ -6,7 +6,7 @@
 
 const Self = @This();
 
-const Colour = enum {
+const Colour = union(enum) {
     none,
     black,
     red,
@@ -24,6 +24,9 @@ const Colour = enum {
     bright_magenta,
     bright_cyan,
     bright_white,
+
+    @"256": u8,
+    rgb: [3]u8,
 };
 
 fg: Colour = .white,
@@ -75,6 +78,18 @@ pub fn dump(self: Self, writer: anytype) !void {
         .bright_magenta => try writer.writeAll(";95"),
         .bright_cyan => try writer.writeAll(";96"),
         .bright_white => try writer.writeAll(";97"),
+        .@"256" => {
+            try writer.writeAll(";38;5");
+            try writer.print(";{d}", .{self.fg.@"256"});
+        },
+        .rgb => {
+            try writer.writeAll(";38;2");
+            try writer.print(";{d};{d};{d}", .{
+                self.fg.rgb[0],
+                self.fg.rgb[1],
+                self.fg.rgb[2],
+            });
+        },
     }
     switch (self.bg) {
         .none => {},
@@ -94,6 +109,18 @@ pub fn dump(self: Self, writer: anytype) !void {
         .bright_magenta => try writer.writeAll(";105"),
         .bright_cyan => try writer.writeAll(";106"),
         .bright_white => try writer.writeAll(";107"),
+        .@"256" => {
+            try writer.writeAll(";48;5");
+            try writer.print(";{d}", .{self.bg.@"256"});
+        },
+        .rgb => {
+            try writer.writeAll(";48;2");
+            try writer.print(";{d};{d};{d}", .{
+                self.bg.rgb[0],
+                self.bg.rgb[1],
+                self.bg.rgb[2],
+            });
+        },
     }
     try writer.writeAll("m");
 }
