@@ -6,7 +6,12 @@
 
 const Self = @This();
 
-const Colour = union(enum) {
+pub const Colour = union(enum) {
+    pub const fromDescription = @import("colour_description.zig").parseColourDescription;
+
+    // TODO since the default colours are also part of the 256 colour spec,
+    //      maybe we should just use that. The dump function would then special
+    //      case them and use legacy escape sequences.
     none,
     black,
     red,
