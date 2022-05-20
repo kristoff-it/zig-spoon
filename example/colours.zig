@@ -10,6 +10,9 @@ const red = spoon.Attribute{ .fg = .red, .italic = true };
 const green = spoon.Attribute{ .fg = .green, .blinking = true };
 const blue = spoon.Attribute{ .fg = .blue, .bold = true };
 const cyan = spoon.Attribute{ .fg = .cyan, .reverse = true };
+const parsed = spoon.Attribute.Colour.fromDescription("magenta") catch
+    @compileError("bad colour description");
+const magenta = spoon.Attribute{ .fg = parsed, .dimmed = true };
 const reset = spoon.Attribute{};
 
 pub fn main() !void {
@@ -21,6 +24,8 @@ pub fn main() !void {
     try writer.writeAll("bar ");
     try blue.dump(writer);
     try writer.writeAll("baz ");
+    try magenta.dump(writer);
+    try writer.writeAll("zig ");
     try cyan.dump(writer);
     try writer.writeAll("spoon\n");
 
