@@ -34,4 +34,12 @@ pub fn build(b: *Builder) void {
         exe.addPackagePath("spoon", "import.zig");
         exe.install();
     }
+
+    {
+        const exe = b.addExecutable("table-256-colours", "example/table-256-colours.zig");
+        exe.setTarget(target);
+        exe.setBuildMode(mode);
+        exe.addPackagePath("spoon", "import.zig");
+        exe.install();
+    }
 }
