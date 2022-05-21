@@ -88,7 +88,7 @@ const InputParser = struct {
             'g' & '\x1F' => return Input{ .content = .{ .codepoint = 'g' }, .mod_ctrl = true },
             'h' & '\x1F' => return Input{ .content = .{ .codepoint = 'h' }, .mod_ctrl = true },
             'i' & '\x1F' => return Input{ .content = .{ .codepoint = '\t' } },
-            'j' & '\x1F' => return Input{ .content = .{ .codepoint = 'j' }, .mod_ctrl = true },
+            'j' & '\x1F' => return Input{ .content = .{ .codepoint = '\n' } }, // Carriage return, which we convert to newline.
             'k' & '\x1F' => return Input{ .content = .{ .codepoint = 'k' }, .mod_ctrl = true },
             'l' & '\x1F' => return Input{ .content = .{ .codepoint = 'l' }, .mod_ctrl = true },
             'm' & '\x1F' => return Input{ .content = .{ .codepoint = '\n' } },
@@ -290,14 +290,13 @@ const InputParser = struct {
         return Input{
             .content = switch (codepoint) {
                 9 => .{ .codepoint = '\t' },
-                13 => .{ .codepoint = '\n' },
+                57414, 10, 13 => .{ .codepoint = '\n' }, // Both newline and carriage return will return a newline.
                 27 => .escape,
                 57409 => .{ .codepoint = ',' },
                 57410 => .{ .codepoint = '/' },
                 57411 => .{ .codepoint = '*' },
                 57412 => .{ .codepoint = '-' },
                 57413 => .{ .codepoint = '+' },
-                57414 => .{ .codepoint = '\n' },
                 57415 => .{ .codepoint = '=' },
                 57417 => .arrow_left,
                 57418 => .arrow_right,
@@ -334,6 +333,16 @@ test "input parser: Mulitple bytes, legacy escape sequence embedded within" {
     try testing.expectEqual(Input{ .content = .{ .codepoint = 'c' } }, parser.next().?);
     try testing.expectEqual(Input{ .content = .arrow_up }, parser.next().?);
     try testing.expectEqual(Input{ .content = .{ .codepoint = 'd' } }, parser.next().?);
+    try testing.expect(parser.next() == null);
+}
+
+test "input parser: Newline, carriage return, enter" {
+    const testing = std.testing;
+    var parser = inputParser("\r\n\x1B[10;1u\x1B[13;1u");
+    try testing.expectEqual(Input{ .content = .{ .codepoint = '\n' } }, parser.next().?);
+    try testing.expectEqual(Input{ .content = .{ .codepoint = '\n' } }, parser.next().?);
+    try testing.expectEqual(Input{ .content = .{ .codepoint = '\n' } }, parser.next().?);
+    try testing.expectEqual(Input{ .content = .{ .codepoint = '\n' } }, parser.next().?);
     try testing.expect(parser.next() == null);
 }
 

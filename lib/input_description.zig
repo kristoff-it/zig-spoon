@@ -85,7 +85,7 @@ pub fn parseInputDescription(str: []const u8) !Input {
             ret.content = .{ .codepoint = 127 };
             break;
         } else if (mem.eql(u8, buf, "enter") or mem.eql(u8, buf, "return")) {
-            ret.content = .{ .codepoint = '\r' };
+            ret.content = .{ .codepoint = '\n' };
             break;
         } else if (buf[0] == 'F') {
             ret.content = .{ .function = fmt.parseInt(u8, buf[1..], 10) catch return error.UnkownBadDescription };
@@ -187,7 +187,11 @@ test "input description parser: good input" {
         try parseInputDescription("M-S-escape"),
     );
     try testing.expectEqual(
-        Input{ .content = .{ .codepoint = '\r' }, .mod_super = true },
+        Input{ .content = .{ .codepoint = '\n' } },
+        try parseInputDescription("return"),
+    );
+    try testing.expectEqual(
+        Input{ .content = .{ .codepoint = '\n' }, .mod_super = true },
         try parseInputDescription("S-return"),
     );
     try testing.expectEqual(
