@@ -182,12 +182,12 @@ pub fn clear(self: *Self) !void {
 
 /// Set window title using OSC 2.
 /// Should not be called inside a rendering function.
-pub fn setWindowTitle(self: *Self, title: []const u8) !void {
+pub fn setWindowTitle(self: *Self, comptime fmt: []const u8, args: anytype) !void {
     const writer = self.stdout.writer();
     defer self.stdout.flush() catch {};
 
     try writer.writeAll("\x1b]2;");
-    try writer.writeAll(title);
+    try writer.print(fmt, args);
     try writer.writeAll("\x1b\\");
 }
 

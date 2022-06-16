@@ -33,7 +33,7 @@ pub fn main() !void {
     try term.hideCursor();
 
     try term.fetchSize();
-    try term.setWindowTitle("zig-spoon example: menu");
+    try term.setWindowTitle("zig-spoon example: menu", .{});
     try term.updateContent();
 
     var buf: [16]u8 = undefined;
