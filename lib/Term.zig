@@ -11,6 +11,7 @@ const io = std.io;
 const mem = std.mem;
 const os = std.os;
 const unicode = std.unicode;
+const debug = std.debug;
 
 const Attribute = @import("Attribute.zig");
 const spells = @import("spells.zig");
@@ -31,9 +32,13 @@ stdout: io.BufferedWriter(4096, fs.File.Writer),
 
 user_render: UserRender,
 
+/// Are we currently rendering?
+currently_rendering: bool,
+
 // TODO options struct
 //      -> IO read mode
 pub fn init(self: *Self, ur: UserRender) !void {
+    self.currently_rendering = false;
     self.cooked = true;
     self.user_render = ur;
     self.tty = try fs.cwd().openFile(
@@ -157,7 +162,11 @@ pub fn fetchSize(self: *Self) !void {
 }
 
 pub fn updateContent(self: *Self) !void {
-    if (self.cooked) return;
+    debug.assert(!self.currently_rendering);
+    debug.assert(!self.cooked);
+
+    self.currently_rendering = true;
+    defer self.currently_rendering = false;
 
     // Yes that's right, we write directly to stdout, not to a back buffer.
     // Thanks to the sync escape sequence, there should be no flickering
@@ -183,6 +192,8 @@ pub fn clear(self: *Self) !void {
 /// Set window title using OSC 2.
 /// Should not be called inside a rendering function.
 pub fn setWindowTitle(self: *Self, comptime fmt: []const u8, args: anytype) !void {
+    debug.assert(!self.currently_rendering);
+
     const writer = self.stdout.writer();
     defer self.stdout.flush() catch {};
 
@@ -211,30 +222,35 @@ pub fn showCursor(self: *Self) !void {
 
 /// Set the text attributes for all following writes.
 pub fn setAttribute(self: *Self, attr: Attribute) !void {
+    debug.assert(self.currently_rendering);
     const writer = self.stdout.writer();
     try attr.dump(writer);
 }
 
 /// Write byte.
 pub fn writeByte(self: *Self, byte: u8) !void {
+    debug.assert(self.currently_rendering);
     const writer = self.stdout.writer();
     try writer.writeByte(byte);
 }
 
 /// Write a byte N times.
 pub fn writeByteNTimes(self: *Self, byte: u8, n: usize) !void {
+    debug.assert(self.currently_rendering);
     const writer = self.stdout.writer();
     try writer.writeByteNTimes(byte, n);
 }
 
 /// Write all bytes.
 pub fn writeAll(self: *Self, bytes: []const u8) !void {
+    debug.assert(self.currently_rendering);
     const writer = self.stdout.writer();
     try writer.writeAll(bytes);
 }
 
 /// Write all bytes, wrapping at the end of the line.
 pub fn writeAllWrapping(self: *Self, bytes: []const u8) !void {
+    debug.assert(self.currently_rendering);
     const writer = self.stdout.writer();
     try writer.writeAll(spells.enable_auto_wrap);
     try writer.writeAll(bytes);
@@ -245,6 +261,8 @@ pub fn writeAllWrapping(self: *Self, bytes: []const u8) !void {
 /// If the amount of written codepoints is less than `width`, returns the
 /// difference, otherwise 0.
 pub fn writeLine(self: *Self, max_width: usize, bytes: []const u8) !usize {
+    debug.assert(self.currently_rendering);
+
     const writer = self.stdout.writer();
 
     var view = unicode.Utf8View.init(bytes) catch {
