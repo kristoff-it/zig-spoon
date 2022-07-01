@@ -16,44 +16,43 @@ const debug = std.debug;
 const Attribute = @import("Attribute.zig");
 const spells = @import("spells.zig");
 
-pub const UserRender = fn (self: *Self, rows: usize, columns: usize) anyerror!void;
-
 const Self = @This();
 
-cooked: bool,
-cooked_termios: os.termios,
+/// Are we in raw or cooked mode?
+cooked: bool = true,
+
+/// The original termios configuration saved when entering raw mode.
+cooked_termios: os.termios = undefined,
 
 /// Size of the terminal, updated when SIGWINCH is received.
-width: usize,
-height: usize,
-
-tty: fs.File,
-stdout: io.BufferedWriter(4096, fs.File.Writer),
-
-user_render: UserRender,
+width: usize = undefined,
+height: usize = undefined,
 
 /// Are we currently rendering?
-currently_rendering: bool,
+currently_rendering: bool = false,
+
+tty: fs.File = undefined,
 
 // TODO options struct
 //      -> IO read mode
-pub fn init(self: *Self, ur: UserRender) !void {
-    self.currently_rendering = false;
-    self.cooked = true;
-    self.user_render = ur;
-    self.tty = try fs.cwd().openFile(
-        "/dev/tty",
-        .{ .read = true, .write = true },
-    );
-    errdefer self.tty.close();
-    self.stdout = io.bufferedWriter(self.tty.writer());
+pub fn init(self: *Self) !void {
+    self.* = .{
+        .tty = try fs.cwd().openFile(
+            "/dev/tty",
+            .{ .read = true, .write = true },
+        ),
+    };
 }
 
 pub fn deinit(self: *Self) void {
+    debug.assert(!self.currently_rendering);
+    debug.assert(self.cooked);
     self.tty.close();
 }
 
 pub fn readInput(self: *Self, buffer: []u8) !usize {
+    debug.assert(!self.currently_rendering);
+    debug.assert(!self.cooked);
     return try self.tty.read(buffer);
 }
 
@@ -113,19 +112,18 @@ pub fn uncook(self: *Self) !void {
 
     try os.tcsetattr(self.tty.handle, .FLUSH, raw);
 
-    const writer = self.stdout.writer();
-    defer self.stdout.flush() catch {};
-
-    try writer.writeAll(spells.save_cursor_position);
-    try writer.writeAll(spells.save_cursor_position);
-    try writer.writeAll(spells.enter_alt_buffer);
-
-    try writer.writeAll(spells.enable_kitty_keyboard);
-
-    try writer.writeAll(spells.overwrite_mode);
-    try writer.writeAll(spells.reset_auto_wrap);
-    try writer.writeAll(spells.reset_auto_repeat);
-    try writer.writeAll(spells.reset_auto_interlace);
+    const writer = self.tty.writer();
+    try writer.writeAll(
+        spells.save_cursor_position ++
+            spells.save_cursor_position ++
+            spells.enter_alt_buffer ++
+            spells.enable_kitty_keyboard ++
+            spells.overwrite_mode ++
+            spells.reset_auto_wrap ++
+            spells.reset_auto_repeat ++
+            spells.reset_auto_interlace ++
+            spells.hide_cursor,
+    );
 }
 
 /// Enter cooked mode.
@@ -133,19 +131,17 @@ pub fn cook(self: *Self) !void {
     if (self.cooked) return;
     self.cooked = true;
 
-    const writer = self.stdout.writer();
-    defer self.stdout.flush() catch {};
-
-    try writer.writeAll(spells.disable_kitty_keyboard);
-
-    try writer.writeAll(spells.clear);
-    try writer.writeAll(spells.leave_alt_buffer);
-    try writer.writeAll(spells.restore_screen);
-    try writer.writeAll(spells.restore_cursor_position);
-
-    try writer.writeAll(spells.show_cursor);
-    try writer.writeAll(spells.reset_attributes);
-    try writer.writeAll(spells.reset_attributes);
+    const writer = self.tty.writer();
+    try writer.writeAll(
+        spells.disable_kitty_keyboard ++
+            spells.clear ++
+            spells.leave_alt_buffer ++
+            spells.restore_screen ++
+            spells.restore_cursor_position ++
+            spells.show_cursor ++
+            spells.reset_attributes ++
+            spells.reset_attributes,
+    );
 
     try os.tcsetattr(self.tty.handle, .FLUSH, self.cooked_termios);
 }
@@ -161,166 +157,176 @@ pub fn fetchSize(self: *Self) !void {
     self.width = size.ws_col;
 }
 
-pub fn updateContent(self: *Self) !void {
+/// Set window title using OSC 2. Shall not be called while rendering.
+pub fn setWindowTitle(self: *Self, comptime fmt: []const u8, args: anytype) !void {
+    debug.assert(!self.currently_rendering);
+    const writer = self.tty.writer();
+    try writer.print("\x1b]2;" ++ fmt ++ "\x1b\\", args);
+}
+
+pub fn getRenderContext(self: *Self) !RenderContext {
     debug.assert(!self.currently_rendering);
     debug.assert(!self.cooked);
 
     self.currently_rendering = true;
-    defer self.currently_rendering = false;
+    errdefer self.currently_rendering = false;
 
-    // Yes that's right, we write directly to stdout, not to a back buffer.
-    // Thanks to the sync escape sequence, there should be no flickering
-    // regardless. This makes spoon a lot more efficient, with the slight caveat
-    // that you need to manually remember what changed and needs updating.
-    const writer = self.stdout.writer();
-    defer self.stdout.flush() catch {};
+    var rc = RenderContext{
+        .term = self,
+        .buffer = io.bufferedWriter(self.tty.writer()),
+    };
 
+    const writer = rc.buffer.writer();
     try writer.writeAll(spells.start_sync);
     try writer.writeAll(spells.reset_attributes);
 
-    try @call(.{}, self.user_render, .{ self, self.height, self.width });
-
-    try writer.writeAll(spells.end_sync);
+    return rc;
 }
 
-/// Clears all content.
-pub fn clear(self: *Self) !void {
-    const writer = self.stdout.writer();
-    try writer.writeAll(spells.clear);
-}
+pub const RenderContext = struct {
+    term: *Self,
+    buffer: io.BufferedWriter(4096, fs.File.Writer),
 
-/// Set window title using OSC 2.
-/// Should not be called inside a rendering function.
-pub fn setWindowTitle(self: *Self, comptime fmt: []const u8, args: anytype) !void {
-    debug.assert(!self.currently_rendering);
+    /// Finishes the render operation. The render context may not be used any
+    /// further.
+    pub fn done(rc: *RenderContext) !void {
+        debug.assert(rc.term.currently_rendering);
+        debug.assert(!rc.term.cooked);
+        defer rc.term.currently_rendering = false;
+        const writer = rc.buffer.writer();
+        try writer.writeAll(spells.end_sync);
+        try rc.buffer.flush();
+    }
 
-    const writer = self.stdout.writer();
-    defer self.stdout.flush() catch {};
+    /// Clears all content.
+    pub fn clear(rc: *RenderContext) !void {
+        debug.assert(rc.term.currently_rendering);
+        const writer = rc.buffer.writer();
+        try writer.writeAll(spells.clear);
+    }
 
-    try writer.writeAll("\x1b]2;");
-    try writer.print(fmt, args);
-    try writer.writeAll("\x1b\\");
-}
+    /// Move the cursor to the specified cell.
+    pub fn moveCursorTo(rc: *RenderContext, row: usize, col: usize) !void {
+        debug.assert(rc.term.currently_rendering);
+        const writer = rc.buffer.writer();
+        try writer.print(spells.move_cursor_fmt, .{ row + 1, col + 1 });
+    }
 
-/// Move the cursor to the specified cell.
-pub fn moveCursorTo(self: *Self, row: usize, col: usize) !void {
-    const writer = self.stdout.writer();
-    try writer.print(spells.move_cursor_fmt, .{ row + 1, col + 1 });
-}
+    /// Hide the cursor.
+    pub fn hideCursor(rc: *RenderContext) !void {
+        debug.assert(rc.term.currently_rendering);
+        const writer = rc.buffer.writer();
+        try writer.writeAll(spells.hide_cursor);
+    }
 
-/// Hide the cursor.
-pub fn hideCursor(self: *Self) !void {
-    const writer = self.stdout.writer();
-    try writer.writeAll(spells.hide_cursor);
-}
+    /// Show the cursor.
+    pub fn showCursor(rc: *RenderContext) !void {
+        debug.assert(rc.term.currently_rendering);
+        const writer = rc.buffer.writer();
+        try writer.writeAll(spells.show_cursor);
+    }
 
-/// Show the cursor.
-pub fn showCursor(self: *Self) !void {
-    const writer = self.stdout.writer();
-    try writer.writeAll(spells.show_cursor);
-}
+    /// Set the text attributes for all following writes.
+    pub fn setAttribute(rc: *RenderContext, attr: Attribute) !void {
+        debug.assert(rc.term.currently_rendering);
+        const writer = rc.buffer.writer();
+        try attr.dump(writer);
+    }
 
-/// Set the text attributes for all following writes.
-pub fn setAttribute(self: *Self, attr: Attribute) !void {
-    debug.assert(self.currently_rendering);
-    const writer = self.stdout.writer();
-    try attr.dump(writer);
-}
+    /// Write byte.
+    pub fn writeByte(rc: *RenderContext, byte: u8) !void {
+        debug.assert(rc.term.currently_rendering);
+        const writer = rc.buffer.writer();
+        try writer.writeByte(byte);
+    }
 
-/// Write byte.
-pub fn writeByte(self: *Self, byte: u8) !void {
-    debug.assert(self.currently_rendering);
-    const writer = self.stdout.writer();
-    try writer.writeByte(byte);
-}
+    /// Write a byte N times.
+    pub fn writeByteNTimes(rc: *RenderContext, byte: u8, n: usize) !void {
+        debug.assert(rc.term.currently_rendering);
+        const writer = rc.buffer.writer();
+        try writer.writeByteNTimes(byte, n);
+    }
 
-/// Write a byte N times.
-pub fn writeByteNTimes(self: *Self, byte: u8, n: usize) !void {
-    debug.assert(self.currently_rendering);
-    const writer = self.stdout.writer();
-    try writer.writeByteNTimes(byte, n);
-}
+    /// Write all bytes.
+    pub fn writeAll(rc: *RenderContext, bytes: []const u8) !void {
+        debug.assert(rc.term.currently_rendering);
+        const writer = rc.buffer.writer();
+        try writer.writeAll(bytes);
+    }
 
-/// Write all bytes.
-pub fn writeAll(self: *Self, bytes: []const u8) !void {
-    debug.assert(self.currently_rendering);
-    const writer = self.stdout.writer();
-    try writer.writeAll(bytes);
-}
+    /// Write all bytes, wrapping at the end of the line.
+    pub fn writeAllWrapping(rc: *RenderContext, bytes: []const u8) !void {
+        debug.assert(rc.term.currently_rendering);
+        const writer = rc.buffer.writer();
+        try writer.writeAll(spells.enable_auto_wrap);
+        try writer.writeAll(bytes);
+        try writer.writeAll(spells.reset_auto_wrap);
+    }
 
-/// Write all bytes, wrapping at the end of the line.
-pub fn writeAllWrapping(self: *Self, bytes: []const u8) !void {
-    debug.assert(self.currently_rendering);
-    const writer = self.stdout.writer();
-    try writer.writeAll(spells.enable_auto_wrap);
-    try writer.writeAll(bytes);
-    try writer.writeAll(spells.reset_auto_wrap);
-}
+    /// Write at most `max_width` of `bytes`, abbreviating with '…' if necessary.
+    /// If the amount of written codepoints is less than `width`, returns the
+    /// difference, otherwise 0.
+    pub fn writeLine(rc: *RenderContext, max_width: usize, bytes: []const u8) !usize {
+        debug.assert(rc.term.currently_rendering);
+        const writer = rc.buffer.writer();
 
-/// Write at most `max_width` of `bytes`, abbreviating with '…' if necessary.
-/// If the amount of written codepoints is less than `width`, returns the
-/// difference, otherwise 0.
-pub fn writeLine(self: *Self, max_width: usize, bytes: []const u8) !usize {
-    debug.assert(self.currently_rendering);
+        var view = unicode.Utf8View.init(bytes) catch {
+            // Strings with unicode characters not recognized by zigs unicode
+            // view are not uncommon. Treating those bytes as u8 chars is definitely
+            // wrong, but better than crashing or displaying nothing.
+            // TODO properly handle unicode
+            return try writeLineNoUnicode(writer, max_width, bytes);
+        };
 
-    const writer = self.stdout.writer();
-
-    var view = unicode.Utf8View.init(bytes) catch {
-        // Strings with unicode characters not recognized by zigs unicode
-        // view are not uncommon. Treating those bytes as u8 chars is definitely
-        // wrong, but better than crashing or displaying nothing.
-        // TODO properly handle unicode
-        return try writeLineNoUnicode(writer, max_width, bytes);
-    };
-
-    var written: usize = 0;
-    var it = view.iterator();
-    while (it.nextCodepointSlice()) |cp| : (written += 1) {
-        if (written == max_width) {
-            return 0;
-        } else if (written == max_width - 1) {
-            // We only have room for one more codepoint. Look ahead to see if we
-            // need to draw '…'.
-            if (it.nextCodepointSlice()) |_| {
-                try writer.writeAll("…");
+        var written: usize = 0;
+        var it = view.iterator();
+        while (it.nextCodepointSlice()) |cp| : (written += 1) {
+            if (written == max_width) {
+                return 0;
+            } else if (written == max_width - 1) {
+                // We only have room for one more codepoint. Look ahead to see if we
+                // need to draw '…'.
+                if (it.nextCodepointSlice()) |_| {
+                    try writer.writeAll("…");
+                } else {
+                    try writer.writeAll(cp);
+                }
+                return 0;
             } else {
-                try writer.writeAll(cp);
+                try writeCodePoint(writer, cp);
             }
+        }
+        return max_width - written;
+    }
+
+    fn writeLineNoUnicode(writer: anytype, max_width: usize, bytes: []const u8) !usize {
+        if (bytes.len > max_width) {
+            for (bytes[0 .. max_width - 1]) |char| try writeAscii(writer, char);
+            try writer.writeAll("…");
             return 0;
         } else {
-            try writeCodePoint(writer, cp);
+            for (bytes) |char| try writeAscii(writer, char);
+            return max_width - bytes.len;
         }
     }
-    return max_width - written;
-}
 
-fn writeLineNoUnicode(writer: anytype, max_width: usize, bytes: []const u8) !usize {
-    if (bytes.len > max_width) {
-        for (bytes[0 .. max_width - 1]) |char| try writeAscii(writer, char);
-        try writer.writeAll("…");
-        return 0;
-    } else {
-        for (bytes) |char| try writeAscii(writer, char);
-        return max_width - bytes.len;
+    fn writeCodePoint(writer: anytype, cp: []const u8) !void {
+        if (cp.len == 1) {
+            try writeAscii(writer, cp[0]);
+        } else {
+            try writer.writeAll(cp);
+        }
     }
-}
 
-fn writeCodePoint(writer: anytype, cp: []const u8) !void {
-    if (cp.len == 1) {
-        try writeAscii(writer, cp[0]);
-    } else {
-        try writer.writeAll(cp);
+    fn writeAscii(writer: anytype, char: u8) !void {
+        // Sanitize the input. We don't want to print an unwanted control character
+        // to the terminal.
+        if (char == '\n' or char == '\t' or char == '\r' or char == ' ') {
+            try writer.writeByte(' ');
+        } else if (ascii.isGraph(char)) {
+            try writer.writeByte(char);
+        } else {
+            try writer.writeAll("�");
+        }
     }
-}
-
-fn writeAscii(writer: anytype, char: u8) !void {
-    // Sanitize the input. We don't want to print an unwanted control character
-    // to the terminal.
-    if (char == '\n' or char == '\t' or char == '\r' or char == ' ') {
-        try writer.writeByte(' ');
-    } else if (ascii.isGraph(char)) {
-        try writer.writeByte(char);
-    } else {
-        try writer.writeAll("�");
-    }
-}
+};

@@ -13,7 +13,7 @@ var read: usize = undefined;
 var empty = true;
 
 pub fn main() !void {
-    try term.init(render);
+    try term.init();
     defer term.deinit();
 
     os.sigaction(os.SIG.WINCH, &os.Sigaction{
@@ -32,51 +32,52 @@ pub fn main() !void {
     try term.uncook();
     defer term.cook() catch {};
 
-    try term.hideCursor();
-
     try term.fetchSize();
     try term.setWindowTitle("zig-spoon example: input-demo", .{});
-    try term.updateContent();
+    try render();
 
     while (loop) {
         _ = try os.poll(&fds, -1);
 
         read = try term.readInput(&buf);
         empty = false;
-        try term.updateContent();
+        try render();
     }
 }
 
-fn render(_: *spoon.Term, _: usize, columns: usize) !void {
-    try term.clear();
+fn render() !void {
+    var rc = try term.getRenderContext();
+    defer rc.done() catch {};
 
-    try term.moveCursorTo(0, 0);
-    try term.setAttribute(.{ .fg = .green, .reverse = true });
-    const rest = try term.writeLine(columns, " Spoon example program: input-demo");
-    try term.writeByteNTimes(' ', rest);
+    try rc.clear();
 
-    try term.moveCursorTo(1, 1);
-    try term.setAttribute(.{ .fg = .red, .bold = true });
-    _ = try term.writeLine(columns - 1, "Input demo / tester, q to exit.");
+    try rc.moveCursorTo(0, 0);
+    try rc.setAttribute(.{ .fg = .green, .reverse = true });
+    const rest = try rc.writeLine(term.width, " Spoon example program: input-demo");
+    try rc.writeByteNTimes(' ', rest);
 
-    try term.moveCursorTo(3, 1);
-    try term.setAttribute(.{ .bold = true });
+    try rc.moveCursorTo(1, 1);
+    try rc.setAttribute(.{ .fg = .red, .bold = true });
+    _ = try rc.writeLine(term.width - 1, "Input demo / tester, q to exit.");
+
+    try rc.moveCursorTo(3, 1);
+    try rc.setAttribute(.{ .bold = true });
     if (empty) {
-        _ = try term.writeLine(columns - 1, "Press a key! Or try to paste something!");
+        _ = try rc.writeLine(term.width - 1, "Press a key! Or try to paste something!");
     } else {
-        const writer = term.stdout.writer();
+        const writer = rc.buffer.writer();
         try writer.writeAll("Bytes read:    ");
-        try term.setAttribute(.{});
+        try rc.setAttribute(.{});
         try writer.print("{}", .{read});
 
         var valid_unicode = true;
         _ = unicode.Utf8View.init(buf[0..read]) catch {
             valid_unicode = false;
         };
-        try term.moveCursorTo(4, 1);
-        try term.setAttribute(.{ .bold = true });
+        try rc.moveCursorTo(4, 1);
+        try rc.setAttribute(.{ .bold = true });
         try writer.writeAll("Valid unicode: ");
-        try term.setAttribute(.{});
+        try rc.setAttribute(.{});
         if (valid_unicode) {
             try writer.writeAll("yes: \"");
             for (buf[0..read]) |c| {
@@ -117,15 +118,15 @@ fn render(_: *spoon.Term, _: usize, columns: usize) !void {
             try writer.writeAll("no");
         }
 
-        try term.moveCursorTo(5, 1);
-        try term.setAttribute(.{ .bold = true });
+        try rc.moveCursorTo(5, 1);
+        try rc.setAttribute(.{ .bold = true });
         const msg = "Input events:";
         try writer.writeAll(msg);
         var it = spoon.inputParser(buf[0..read]);
         var i: usize = 1;
-        try term.setAttribute(.{});
+        try rc.setAttribute(.{});
         while (it.next()) |in| : (i += 1) {
-            try term.moveCursorTo(5 + (i - 1), msg.len + 3);
+            try rc.moveCursorTo(5 + (i - 1), msg.len + 3);
             try writer.print("{}: ", .{i});
             switch (in.content) {
                 .codepoint => |cp| {
@@ -147,7 +148,7 @@ fn render(_: *spoon.Term, _: usize, columns: usize) !void {
 
 fn handleSigWinch(_: c_int) callconv(.C) void {
     term.fetchSize() catch {};
-    term.updateContent() catch {};
+    render() catch {};
 }
 
 /// Custom panic handler, so that we can try to cook the terminal on a crash,
