@@ -87,6 +87,18 @@ pub fn parseInputDescription(str: []const u8) !Input {
         } else if (mem.eql(u8, buf, "enter") or mem.eql(u8, buf, "return")) {
             ret.content = .{ .codepoint = '\n' };
             break;
+        } else if (mem.eql(u8, buf, "print")) {
+            ret.content = .print;
+            break;
+        } else if (mem.eql(u8, buf, "scroll-lock")) {
+            ret.content = .scroll_lock;
+            break;
+        } else if (mem.eql(u8, buf, "pause")) {
+            ret.content = .pause;
+            break;
+        } else if (mem.eql(u8, buf, "begin")) {
+            ret.content = .begin;
+            break;
         } else if (buf[0] == 'F') {
             ret.content = .{ .function = fmt.parseInt(u8, buf[1..], 10) catch return error.UnkownBadDescription };
             break;
