@@ -167,3 +167,34 @@ pub fn restrictedPaddingWriter(underlying_stream: anytype, len: usize) Restricte
         .len_left = len,
     };
 }
+
+test "RestrictedPaddingWriter" {
+    // Just some superficial test to make sure everything smells right. We are
+    // not testing the actual contents, what is actually written, because it
+    // should be fairly obvious to see when looking at the example programs.
+    const testing = std.testing;
+    {
+        const bytes = "12345678";
+        var counting_writer = io.countingWriter(io.null_writer);
+        var rpw = restrictedPaddingWriter(counting_writer.writer(), bytes.len);
+        try rpw.writer().writeAll(bytes);
+        try rpw.finish();
+        try testing.expect(counting_writer.bytes_written == bytes.len);
+    }
+    {
+        const bytes = "12345678";
+        var counting_writer = io.countingWriter(io.null_writer);
+        var rpw = restrictedPaddingWriter(counting_writer.writer(), bytes.len - 1);
+        try rpw.writer().writeAll(bytes);
+        try rpw.finish();
+        try testing.expect(counting_writer.bytes_written == bytes.len - 2 + "…".len);
+    }
+    {
+        const bytes = "12345678";
+        var counting_writer = io.countingWriter(io.null_writer);
+        var rpw = restrictedPaddingWriter(counting_writer.writer(), 20);
+        try rpw.writer().writeAll(bytes);
+        try rpw.pad();
+        try testing.expect(counting_writer.bytes_written == 20);
+    }
+}
