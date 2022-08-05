@@ -42,26 +42,23 @@ pub fn main() !void {
         const read = try term.readInput(&buf);
         var it = spoon.inputParser(buf[0..read]);
         while (it.next()) |in| {
-            switch (in.content) {
-                .escape => {
-                    loop = false;
-                    break;
-                },
-                .codepoint => |cp| {
-                    if (cp == 'q') loop = false;
-                    break;
-                },
-                .arrow_down => {
-                    if (cursor < 3) {
-                        cursor += 1;
-                        try render();
-                    }
-                },
-                .arrow_up => {
-                    cursor -|= 1;
+            // The input descriptor parser is not only useful for user-configuration.
+            // Since it can work at comptime, you can use it to simplify the
+            // matching of hardcoded keybinds as well. Down below we specify the
+            // typical keybinds a terminal user would expect for moving up and
+            // down, without getting our hands dirty in the interals of zig-spoons
+            // Input object.
+            if (in.eqlDescription("escape") or in.eqlDescription("q")) {
+                loop = false;
+                break;
+            } else if (in.eqlDescription("arrow-down") or in.eqlDescription("C-n") or in.eqlDescription("j")) {
+                if (cursor < 3) {
+                    cursor += 1;
                     try render();
-                },
-                else => {},
+                }
+            } else if (in.eqlDescription("arrow-up") or in.eqlDescription("C-p") or in.eqlDescription("k")) {
+                cursor -|= 1;
+                try render();
             }
         }
     }

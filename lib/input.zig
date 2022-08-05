@@ -8,6 +8,7 @@ const std = @import("std");
 const ascii = std.ascii;
 const fmt = std.fmt;
 const unicode = std.unicode;
+const meta = std.meta;
 
 // Kitty supports a few more modifiers, but these are the ones that actually
 // make sense. Ok, super probably does not make a lot of sense, but complex
@@ -23,6 +24,13 @@ const kitty_super = 0b1000;
 
 pub const Input = struct {
     pub const fromDescription = @import("input_description.zig").parseInputDescription;
+
+    /// Checks whether the Input equals an input description. Description must
+    /// be comptime known.
+    pub fn eqlDescription(self: Input, comptime descr: []const u8) bool {
+        const description_input = comptime Input.fromDescription(descr) catch @compileError("zig-spoon: Bad input descriptor.");
+        return meta.eql(self, description_input);
+    }
 
     mod_alt: bool = false,
     mod_ctrl: bool = false,
