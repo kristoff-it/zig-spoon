@@ -1,6 +1,7 @@
 const std = @import("std");
-const mem = std.mem;
 const heap = std.heap;
+const math = std.math;
+const mem = std.mem;
 const os = std.os;
 
 const spoon = @import("spoon");
@@ -71,25 +72,44 @@ fn render() !void {
     defer rc.done() catch {};
 
     try rc.clear();
+
+    if (term.width < 6) {
+        try rc.setAttribute(.{ .fg = .red, .bold = true });
+        try rc.writeAllWrapping("Terminal too small!");
+        return;
+    }
+
     try rc.moveCursorTo(0, 0);
     try rc.setAttribute(.{ .fg = .green, .reverse = true });
-    const rest = try rc.writeLine(term.width, " Spoon example program: menu");
-    try rc.writeByteNTimes(' ', rest);
 
-    try rc.moveCursorTo(1, 1);
+    // The RestrictedPaddingWriter helps us avoid writing more than the terminal
+    // is wide. It exposes a normal writer interface you can use with any
+    // function that integrates with that, such as print(), write() and writeAll().
+    // The RestrictedPaddingWriter.pad() function will fill the remaining space
+    // with whitespace padding.
+    var rpw = rc.restrictedPaddingWriter(term.width);
+    try rpw.writer().writeAll(" Spoon example program: menu");
+    try rpw.pad();
+
+    try rc.moveCursorTo(1, 0);
     try rc.setAttribute(.{ .fg = .red, .bold = true });
-    _ = try rc.writeLine(term.width - 1, "Up and Down arrows to select, q to exit.");
+    rpw = rc.restrictedPaddingWriter(term.width);
+    try rpw.writer().writeAll(" Up and Down arrows to select, q to exit.");
+    try rpw.finish(); // No need to pad here, since there is no background.
 
-    try menuEntry(&rc, "foo", 3, term.width);
-    try menuEntry(&rc, "bar", 4, term.width);
-    try menuEntry(&rc, "baz", 5, term.width);
-    try menuEntry(&rc, "xyzzy", 6, term.width);
+    const entry_width = math.min(term.width - 2, 8);
+    try menuEntry(&rc, " foo", 3, entry_width);
+    try menuEntry(&rc, " bar", 4, entry_width);
+    try menuEntry(&rc, " baz", 5, entry_width);
+    try menuEntry(&rc, " →µ←", 6, entry_width);
 }
 
 fn menuEntry(rc: *spoon.Term.RenderContext, name: []const u8, row: usize, width: usize) !void {
     try rc.moveCursorTo(row, 2);
     try rc.setAttribute(.{ .fg = .blue, .reverse = (cursor == row - 3) });
-    _ = try rc.writeLine(width - 2, name);
+    var rpw = rc.restrictedPaddingWriter(width - 1);
+    defer rpw.pad() catch {};
+    try rpw.writer().writeAll(name);
 }
 
 fn handleSigWinch(_: c_int) callconv(.C) void {

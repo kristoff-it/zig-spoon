@@ -13,3 +13,6 @@ pub const Term = @import("lib/Term.zig");
 pub const inputParser = @import("lib/input.zig").inputParser;
 pub const Input = @import("lib/input.zig").Input;
 pub const InputContent = @import("lib/input.zig").InputContent;
+
+pub const restrictedPaddingWriter = @import("lib/restricted_padding_writer.zig").restrictedPaddingWriter;
+pub const RestrictedPaddingWriter = @import("lib/restricted_padding_writer.zig").RestrictedPaddingWriter;

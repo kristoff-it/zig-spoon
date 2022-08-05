@@ -53,30 +53,39 @@ fn render() !void {
 
     try rc.moveCursorTo(0, 0);
     try rc.setAttribute(.{ .fg = .green, .reverse = true });
-    const rest = try rc.writeLine(term.width, " Spoon example program: input-demo");
-    try rc.writeByteNTimes(' ', rest);
+    var rpw = rc.restrictedPaddingWriter(term.width);
+    try rpw.writer().writeAll(" Spoon example program: input-demo");
+    try rpw.pad();
 
-    try rc.moveCursorTo(1, 1);
+    try rc.moveCursorTo(1, 0);
     try rc.setAttribute(.{ .fg = .red, .bold = true });
-    _ = try rc.writeLine(term.width - 1, "Input demo / tester, q to exit.");
+    rpw = rc.restrictedPaddingWriter(term.width);
+    try rpw.writer().writeAll(" Input demo / tester, q to exit.");
+    try rpw.finish();
 
-    try rc.moveCursorTo(3, 1);
+    try rc.moveCursorTo(3, 0);
     try rc.setAttribute(.{ .bold = true });
     if (empty) {
-        _ = try rc.writeLine(term.width - 1, "Press a key! Or try to paste something!");
+        rpw = rc.restrictedPaddingWriter(term.width);
+        try rpw.writer().writeAll(" Press a key! Or try to paste something!");
+        try rpw.finish();
     } else {
-        const writer = rc.buffer.writer();
-        try writer.writeAll("Bytes read:    ");
+        rpw = rc.restrictedPaddingWriter(term.width);
+        var writer = rpw.writer();
+        try writer.writeAll(" Bytes read:    ");
         try rc.setAttribute(.{});
         try writer.print("{}", .{read});
+        try rpw.finish();
 
         var valid_unicode = true;
         _ = unicode.Utf8View.init(buf[0..read]) catch {
             valid_unicode = false;
         };
-        try rc.moveCursorTo(4, 1);
+        try rc.moveCursorTo(4, 0);
         try rc.setAttribute(.{ .bold = true });
-        try writer.writeAll("Valid unicode: ");
+        rpw = rc.restrictedPaddingWriter(term.width);
+        writer = rpw.writer();
+        try writer.writeAll(" Valid unicode: ");
         try rc.setAttribute(.{});
         if (valid_unicode) {
             try writer.writeAll("yes: \"");
@@ -117,16 +126,25 @@ fn render() !void {
         } else {
             try writer.writeAll("no");
         }
+        try rpw.finish();
 
-        try rc.moveCursorTo(5, 1);
-        try rc.setAttribute(.{ .bold = true });
-        const msg = "Input events:";
-        try writer.writeAll(msg);
         var it = spoon.inputParser(buf[0..read]);
         var i: usize = 1;
-        try rc.setAttribute(.{});
         while (it.next()) |in| : (i += 1) {
-            try rc.moveCursorTo(5 + (i - 1), msg.len + 3);
+            rpw = rc.restrictedPaddingWriter(term.width);
+            writer = rpw.writer();
+
+            try rc.moveCursorTo(5 + (i - 1), 0);
+
+            const msg = " Input events:  ";
+            if (i == 1) {
+                try rc.setAttribute(.{ .bold = true });
+                try writer.writeAll(msg);
+                try rc.setAttribute(.{ .bold = false });
+            } else {
+                try writer.writeByteNTimes(' ', msg.len);
+            }
+
             try writer.print("{}: ", .{i});
             switch (in.content) {
                 .codepoint => |cp| {
@@ -142,6 +160,8 @@ fn render() !void {
             if (in.mod_alt) try writer.writeAll(" +Alt");
             if (in.mod_ctrl) try writer.writeAll(" +Ctrl");
             if (in.mod_super) try writer.writeAll(" +Super");
+
+            try rpw.finish();
         }
     }
 }

@@ -15,6 +15,7 @@ const debug = std.debug;
 
 const Attribute = @import("Attribute.zig");
 const spells = @import("spells.zig");
+const rpw = @import("restricted_padding_writer.zig");
 
 const Self = @This();
 
@@ -193,140 +194,64 @@ pub const RenderContext = struct {
         debug.assert(rc.term.currently_rendering);
         debug.assert(!rc.term.cooked);
         defer rc.term.currently_rendering = false;
-        const writer = rc.buffer.writer();
-        try writer.writeAll(spells.end_sync);
+        const wrtr = rc.buffer.writer();
+        try wrtr.writeAll(spells.end_sync);
         try rc.buffer.flush();
     }
 
     /// Clears all content.
     pub fn clear(rc: *RenderContext) !void {
         debug.assert(rc.term.currently_rendering);
-        const writer = rc.buffer.writer();
-        try writer.writeAll(spells.clear);
+        const wrtr = rc.buffer.writer();
+        try wrtr.writeAll(spells.clear);
     }
 
     /// Move the cursor to the specified cell.
     pub fn moveCursorTo(rc: *RenderContext, row: usize, col: usize) !void {
         debug.assert(rc.term.currently_rendering);
-        const writer = rc.buffer.writer();
-        try writer.print(spells.move_cursor_fmt, .{ row + 1, col + 1 });
+        const wrtr = rc.buffer.writer();
+        try wrtr.print(spells.move_cursor_fmt, .{ row + 1, col + 1 });
     }
 
     /// Hide the cursor.
     pub fn hideCursor(rc: *RenderContext) !void {
         debug.assert(rc.term.currently_rendering);
-        const writer = rc.buffer.writer();
-        try writer.writeAll(spells.hide_cursor);
+        const wrtr = rc.buffer.writer();
+        try wrtr.writeAll(spells.hide_cursor);
     }
 
     /// Show the cursor.
     pub fn showCursor(rc: *RenderContext) !void {
         debug.assert(rc.term.currently_rendering);
-        const writer = rc.buffer.writer();
-        try writer.writeAll(spells.show_cursor);
+        const wrtr = rc.buffer.writer();
+        try wrtr.writeAll(spells.show_cursor);
     }
 
     /// Set the text attributes for all following writes.
     pub fn setAttribute(rc: *RenderContext, attr: Attribute) !void {
         debug.assert(rc.term.currently_rendering);
-        const writer = rc.buffer.writer();
-        try attr.dump(writer);
+        const wrtr = rc.buffer.writer();
+        try attr.dump(wrtr);
     }
 
-    /// Write byte.
-    pub fn writeByte(rc: *RenderContext, byte: u8) !void {
+    pub fn restrictedPaddingWriter(rc: *RenderContext, len: usize) getRestrictedPaddingWriterType() {
         debug.assert(rc.term.currently_rendering);
-        const writer = rc.buffer.writer();
-        try writer.writeByte(byte);
+        return rpw.restrictedPaddingWriter(rc.buffer.writer(), len);
     }
 
-    /// Write a byte N times.
-    pub fn writeByteNTimes(rc: *RenderContext, byte: u8, n: usize) !void {
-        debug.assert(rc.term.currently_rendering);
-        const writer = rc.buffer.writer();
-        try writer.writeByteNTimes(byte, n);
-    }
-
-    /// Write all bytes.
-    pub fn writeAll(rc: *RenderContext, bytes: []const u8) !void {
-        debug.assert(rc.term.currently_rendering);
-        const writer = rc.buffer.writer();
-        try writer.writeAll(bytes);
+    // TODO there has to be a less annoying way to do this, right?
+    fn getRestrictedPaddingWriterType() type {
+        var rc: RenderContext = undefined;
+        var r = rpw.restrictedPaddingWriter(rc.buffer.writer(), 42);
+        return @TypeOf(r);
     }
 
     /// Write all bytes, wrapping at the end of the line.
     pub fn writeAllWrapping(rc: *RenderContext, bytes: []const u8) !void {
         debug.assert(rc.term.currently_rendering);
-        const writer = rc.buffer.writer();
-        try writer.writeAll(spells.enable_auto_wrap);
-        try writer.writeAll(bytes);
-        try writer.writeAll(spells.reset_auto_wrap);
-    }
-
-    /// Write at most `max_width` of `bytes`, abbreviating with '…' if necessary.
-    /// If the amount of written codepoints is less than `width`, returns the
-    /// difference, otherwise 0.
-    pub fn writeLine(rc: *RenderContext, max_width: usize, bytes: []const u8) !usize {
-        debug.assert(rc.term.currently_rendering);
-        const writer = rc.buffer.writer();
-
-        var view = unicode.Utf8View.init(bytes) catch {
-            // Strings with unicode characters not recognized by zigs unicode
-            // view are not uncommon. Treating those bytes as u8 chars is definitely
-            // wrong, but better than crashing or displaying nothing.
-            // TODO properly handle unicode
-            return try writeLineNoUnicode(writer, max_width, bytes);
-        };
-
-        var written: usize = 0;
-        var it = view.iterator();
-        while (it.nextCodepointSlice()) |cp| : (written += 1) {
-            if (written == max_width) {
-                return 0;
-            } else if (written == max_width - 1) {
-                // We only have room for one more codepoint. Look ahead to see if we
-                // need to draw '…'.
-                if (it.nextCodepointSlice()) |_| {
-                    try writer.writeAll("…");
-                } else {
-                    try writer.writeAll(cp);
-                }
-                return 0;
-            } else {
-                try writeCodePoint(writer, cp);
-            }
-        }
-        return max_width - written;
-    }
-
-    fn writeLineNoUnicode(writer: anytype, max_width: usize, bytes: []const u8) !usize {
-        if (bytes.len > max_width) {
-            for (bytes[0 .. max_width - 1]) |char| try writeAscii(writer, char);
-            try writer.writeAll("…");
-            return 0;
-        } else {
-            for (bytes) |char| try writeAscii(writer, char);
-            return max_width - bytes.len;
-        }
-    }
-
-    fn writeCodePoint(writer: anytype, cp: []const u8) !void {
-        if (cp.len == 1) {
-            try writeAscii(writer, cp[0]);
-        } else {
-            try writer.writeAll(cp);
-        }
-    }
-
-    fn writeAscii(writer: anytype, char: u8) !void {
-        // Sanitize the input. We don't want to print an unwanted control character
-        // to the terminal.
-        if (char == '\n' or char == '\t' or char == '\r' or char == ' ') {
-            try writer.writeByte(' ');
-        } else if (ascii.isGraph(char)) {
-            try writer.writeByte(char);
-        } else {
-            try writer.writeAll("�");
-        }
+        const wrtr = rc.buffer.writer();
+        try wrtr.writeAll(spells.enable_auto_wrap);
+        try wrtr.writeAll(bytes);
+        try wrtr.writeAll(spells.reset_auto_wrap);
     }
 };
