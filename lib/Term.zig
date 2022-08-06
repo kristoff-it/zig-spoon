@@ -19,6 +19,10 @@ const rpw = @import("restricted_padding_writer.zig");
 
 const Self = @This();
 
+const AltScreenConfig = struct {
+    request_kitty_keyboard_protocol: bool = true,
+};
+
 /// Are we in raw or cooked mode?
 cooked: bool = true,
 
@@ -58,13 +62,14 @@ pub fn readInput(self: *Self, buffer: []u8) !usize {
 }
 
 /// Enter raw mode.
-/// The information on the various flags and escape sequences is pieced
-/// together from various sources, including termios(3) and
-/// https://viewsourcecode.org/snaptoken/kilo/02.enteringRawMode.html.
-/// TODO: IUTF8 ?
-pub fn uncook(self: *Self) !void {
+pub fn uncook(self: *Self, config: AltScreenConfig) !void {
     if (!self.cooked) return;
     self.cooked = false;
+
+    // The information on the various flags and escape sequences is pieced
+    // together from various sources, including termios(3) and
+    // https://viewsourcecode.org/snaptoken/kilo/02.enteringRawMode.html.
+    // TODO: IUTF8 ?
 
     self.cooked_termios = try os.tcgetattr(self.tty.handle);
     errdefer self.cook() catch {};
@@ -113,18 +118,22 @@ pub fn uncook(self: *Self) !void {
 
     try os.tcsetattr(self.tty.handle, .FLUSH, raw);
 
-    const writer = self.tty.writer();
+    var bufwriter = io.bufferedWriter(self.tty.writer());
+    const writer = bufwriter.writer();
     try writer.writeAll(
         spells.save_cursor_position ++
             spells.save_cursor_position ++
             spells.enter_alt_buffer ++
-            spells.enable_kitty_keyboard ++
             spells.overwrite_mode ++
             spells.reset_auto_wrap ++
             spells.reset_auto_repeat ++
             spells.reset_auto_interlace ++
             spells.hide_cursor,
     );
+    if (config.request_kitty_keyboard_protocol) {
+        try writer.writeAll(spells.enable_kitty_keyboard);
+    }
+    try bufwriter.flush();
 }
 
 /// Enter cooked mode.
@@ -132,8 +141,11 @@ pub fn cook(self: *Self) !void {
     if (self.cooked) return;
     self.cooked = true;
 
-    const writer = self.tty.writer();
+    var bufwriter = io.bufferedWriter(self.tty.writer());
+    const writer = bufwriter.writer();
     try writer.writeAll(
+        // Even if we did not request the kitty keyboard protocol, asking the
+        // terminal to disable it should have no effect.
         spells.disable_kitty_keyboard ++
             spells.clear ++
             spells.leave_alt_buffer ++
@@ -143,6 +155,7 @@ pub fn cook(self: *Self) !void {
             spells.reset_attributes ++
             spells.reset_attributes,
     );
+    try bufwriter.flush();
 
     try os.tcsetattr(self.tty.handle, .FLUSH, self.cooked_termios);
 }

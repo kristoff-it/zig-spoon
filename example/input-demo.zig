@@ -13,6 +13,14 @@ var read: usize = undefined;
 var empty = true;
 
 pub fn main() !void {
+    const force_legacy = blk: {
+        var i: usize = 1;
+        while (i < os.argv.len) : (i += 1) {
+            if (mem.eql(u8, mem.span(os.argv[i]), "--force-legacy")) break :blk true;
+        }
+        break :blk false;
+    };
+
     try term.init();
     defer term.deinit();
 
@@ -29,7 +37,7 @@ pub fn main() !void {
         .revents = undefined,
     };
 
-    try term.uncook();
+    try term.uncook(.{ .request_kitty_keyboard_protocol = !force_legacy });
     defer term.cook() catch {};
 
     try term.fetchSize();

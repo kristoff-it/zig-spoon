@@ -28,7 +28,7 @@ pub fn main() !void {
         .revents = undefined,
     };
 
-    try term.uncook();
+    try term.uncook(.{});
     defer term.cook() catch {};
 
     try term.fetchSize();
