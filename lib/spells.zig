@@ -42,3 +42,15 @@ pub const reset_auto_interlace = "\x1B[?9l";
 
 pub const start_sync = "\x1BP=1s\x1B\\";
 pub const end_sync = "\x1BP=2s\x1B\\";
+
+// 1000: just button tracking.
+// 1003: all events, including movement.
+//
+// This enables standard button tracking. This is limited to maximum XY values
+// of 255 - 32 = 223. If anyone complains, we can switch to SGR (1006) encoding,
+// however since that is more annoying to parse I decided to take the easy route
+// for now. Also this does not provide movement events. Can be enabled with 1003,
+// but I don't see that being useful, so it's also not included right not. Let's
+// see if anyone complains.
+pub const enable_mouse_tracking = "\x1B[?1000h";
+pub const disable_mouse_tracking = "\x1B[?1000l";

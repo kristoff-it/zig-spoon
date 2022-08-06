@@ -57,7 +57,11 @@ pub const InputContent = union(enum) {
     pause: void,
     function: u8,
     codepoint: u21,
+
+    mouse: struct { x: usize, y: usize, button: MouseButton },
 };
+
+pub const MouseButton = enum { btn1, btn2, btn3, release, scroll_up, scroll_down };
 
 const InputParser = struct {
     // Types of escape sequences this parser can detect:
@@ -66,6 +70,7 @@ const InputParser = struct {
     // 3) Single integer escape sequences, optionally with kitty modifier, example: "\x1B[2~", "\x1B[2;3~"
     // 4) Kitty unicode sequences, optionally with modifier, example: "\x1B[127u", "\x1B[127;5u"
     // 5) Kitty modified version of 2, example: "\x1B[1;5H"
+    // 6) Mouse input related escape sequences (legacy, not SGR yet)
 
     const Self = @This();
 
@@ -142,6 +147,8 @@ const InputParser = struct {
             // There are two types of '[' escape sequences.
             if (ascii.isDigit(self.bytes.?[2])) {
                 return self.numericEscapeSequence();
+            } else if (self.bytes.?[2] == 'M') {
+                return self.legacyMouseEscapeSequence();
             } else {
                 return self.singleLetterEscapeSequence();
             }
@@ -230,6 +237,57 @@ const InputParser = struct {
         // buffer length, let's  just swallow it.
         self.bytes = null;
         return Input{ .content = .unknown };
+    }
+
+    fn legacyMouseEscapeSequence(self: *Self) Input {
+        // This parses legacy mouse sequences like "\x1B[M" followed by three bytes.
+        // https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-Mouse-Tracking
+        // TODO also support SGR(1006) sequences.
+        if (self.bytes.?.len < "\x1B[Mabc".len) {
+            self.advanceBufferBy(1);
+            return Input{ .content = .unknown };
+        }
+        const a = self.bytes.?[3];
+        const b = self.bytes.?[4];
+        const c = self.bytes.?[5];
+
+        // The first two bits of a encode the button.
+        var ret = Input{ .content = .{ .mouse = undefined } };
+        if (a & 0b01000000 > 0) {
+            ret.content.mouse.button = if (a & 0b00000001 > 0) .scroll_down else .scroll_up;
+        } else {
+            ret.content.mouse.button = switch (a & 0b00000011) {
+                0 => .btn1,
+                1 => .btn2,
+                2 => .btn3,
+                3 => .release,
+                else => unreachable,
+            };
+        }
+
+        // The next three bits of a encode the modifiers.
+        const META: u8 = 0b00001000;
+        const CTRL: u8 = 0b00010000;
+        if (a & META > 0) ret.mod_alt = true;
+        if (a & CTRL > 0) ret.mod_ctrl = true;
+
+        // b and c are the x and y coordinates.
+        // <rant>
+        //   32 is always added to the coordinates to ensure that they are
+        //   printable chars. This hack dates back to X10. Yes. Also they are
+        //   indexed starting at 1. In zig-spoon we (try to) enforce sane 0
+        //   based indexing so that also needs to go. And yet again we uncover
+        //   abominations that allow us to laugh in the face of anyone who
+        //   claims backwards compatability is a good idea. This is what people
+        //   have to deal with if you are too afraid to just break your shitty
+        //   API and do it right. And no, bolting a new /optional/ API on top
+        //   does not count.
+        // </rant>
+        ret.content.mouse.x = b - 32 - 1;
+        ret.content.mouse.y = c - 32 - 1;
+
+        self.advanceBufferBy("\x1b[Mabc".len);
+        return ret;
     }
 
     fn doubleNumericEscapeSequence(self: *Self, first_num_bytes: []const u8) Input {

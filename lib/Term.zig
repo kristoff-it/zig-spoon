@@ -21,6 +21,7 @@ const Self = @This();
 
 const AltScreenConfig = struct {
     request_kitty_keyboard_protocol: bool = true,
+    request_mouse_tracking: bool = false,
 };
 
 /// Are we in raw or cooked mode?
@@ -133,6 +134,9 @@ pub fn uncook(self: *Self, config: AltScreenConfig) !void {
     if (config.request_kitty_keyboard_protocol) {
         try writer.writeAll(spells.enable_kitty_keyboard);
     }
+    if (config.request_mouse_tracking) {
+        try writer.writeAll(spells.enable_mouse_tracking);
+    }
     try bufwriter.flush();
 }
 
@@ -144,9 +148,10 @@ pub fn cook(self: *Self) !void {
     var bufwriter = io.bufferedWriter(self.tty.writer());
     const writer = bufwriter.writer();
     try writer.writeAll(
-        // Even if we did not request the kitty keyboard protocol, asking the
-        // terminal to disable it should have no effect.
+        // Even if we did not request the kitty keyboard protocol or mouse
+        // tracking, asking the terminal to disable it should have no effect.
         spells.disable_kitty_keyboard ++
+            spells.disable_mouse_tracking ++
             spells.clear ++
             spells.leave_alt_buffer ++
             spells.restore_screen ++

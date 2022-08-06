@@ -20,6 +20,13 @@ pub fn main() !void {
         }
         break :blk false;
     };
+    const mouse = blk: {
+        var i: usize = 1;
+        while (i < os.argv.len) : (i += 1) {
+            if (mem.eql(u8, mem.span(os.argv[i]), "--mouse")) break :blk true;
+        }
+        break :blk false;
+    };
 
     try term.init();
     defer term.deinit();
@@ -37,7 +44,10 @@ pub fn main() !void {
         .revents = undefined,
     };
 
-    try term.uncook(.{ .request_kitty_keyboard_protocol = !force_legacy });
+    try term.uncook(.{
+        .request_kitty_keyboard_protocol = !force_legacy,
+        .request_mouse_tracking = mouse,
+    });
     defer term.cook() catch {};
 
     try term.fetchSize();
@@ -163,6 +173,7 @@ fn render() !void {
                     try writer.print("codepoint: {} x{X}", .{ cp, cp });
                 },
                 .function => |f| try writer.print("F{}", .{f}),
+                .mouse => |m| try writer.print("mouse {s} {} {}", .{ @tagName(m.button), m.x, m.y }),
                 else => try writer.writeAll(@tagName(in.content)),
             }
             if (in.mod_alt) try writer.writeAll(" +Alt");
