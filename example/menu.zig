@@ -11,6 +11,13 @@ var loop: bool = true;
 
 var cursor: usize = 0;
 
+// Spoon has debug logging. You can enable it by exporting a boolean called
+// "spoon_log" to root and setting it to true. Beware though that this only
+// makes sense if you wrote your own logging functions (for example writing the
+// logs to a file) as the default logging behaviour, dumping to stderr,
+// obviously conflicts with zig-spoons terminal operations.
+pub const spoon_log = false;
+
 pub fn main() !void {
     try term.init();
     defer term.deinit();

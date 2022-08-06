@@ -13,6 +13,8 @@ const os = std.os;
 const unicode = std.unicode;
 const debug = std.debug;
 
+const log = @import("log.zig");
+
 const Attribute = @import("Attribute.zig");
 const spells = @import("spells.zig");
 const rpw = @import("restricted_padding_writer.zig");
@@ -37,6 +39,7 @@ tty: fs.File = undefined,
 // TODO options struct
 //      -> IO read mode
 pub fn init(self: *Self) !void {
+    log.debug("initializing Term", .{});
     self.* = .{
         .tty = try fs.cwd().openFile(
             "/dev/tty",
@@ -46,12 +49,14 @@ pub fn init(self: *Self) !void {
 }
 
 pub fn deinit(self: *Self) void {
+    log.debug("de-initializing Term", .{});
     debug.assert(!self.currently_rendering);
     debug.assert(self.cooked);
     self.tty.close();
 }
 
 pub fn readInput(self: *Self, buffer: []u8) !usize {
+    log.debug("reading input to buffer", .{});
     debug.assert(!self.currently_rendering);
     debug.assert(!self.cooked);
     return try self.tty.read(buffer);
@@ -65,6 +70,8 @@ pub fn readInput(self: *Self, buffer: []u8) !usize {
 pub fn uncook(self: *Self) !void {
     if (!self.cooked) return;
     self.cooked = false;
+
+    log.debug("uncooking terminal", .{});
 
     self.cooked_termios = try os.tcgetattr(self.tty.handle);
     errdefer self.cook() catch {};
@@ -132,6 +139,8 @@ pub fn cook(self: *Self) !void {
     if (self.cooked) return;
     self.cooked = true;
 
+    log.debug("cooking terminal", .{});
+
     const writer = self.tty.writer();
     try writer.writeAll(
         spells.disable_kitty_keyboard ++
@@ -149,6 +158,7 @@ pub fn cook(self: *Self) !void {
 
 pub fn fetchSize(self: *Self) !void {
     if (self.cooked) return;
+    log.debug("fetching size", .{});
     var size = mem.zeroes(os.system.winsize);
     const err = os.system.ioctl(self.tty.handle, os.system.T.IOCGWINSZ, @ptrToInt(&size));
     if (os.errno(err) != .SUCCESS) {
@@ -156,16 +166,19 @@ pub fn fetchSize(self: *Self) !void {
     }
     self.height = size.ws_row;
     self.width = size.ws_col;
+    log.debug("new size: rows={} cols={}", .{ self.height, self.width });
 }
 
 /// Set window title using OSC 2. Shall not be called while rendering.
 pub fn setWindowTitle(self: *Self, comptime fmt: []const u8, args: anytype) !void {
     debug.assert(!self.currently_rendering);
+    log.debug("setting window title: '{s}', {}", .{ fmt, args });
     const writer = self.tty.writer();
     try writer.print("\x1b]2;" ++ fmt ++ "\x1b\\", args);
 }
 
 pub fn getRenderContext(self: *Self) !RenderContext {
+    log.debug("preparing render context", .{});
     debug.assert(!self.currently_rendering);
     debug.assert(!self.cooked);
 
@@ -193,6 +206,7 @@ pub const RenderContext = struct {
     pub fn done(rc: *RenderContext) !void {
         debug.assert(rc.term.currently_rendering);
         debug.assert(!rc.term.cooked);
+        log.debug("finishing render context", .{});
         defer rc.term.currently_rendering = false;
         const wrtr = rc.buffer.writer();
         try wrtr.writeAll(spells.end_sync);
@@ -202,6 +216,7 @@ pub const RenderContext = struct {
     /// Clears all content.
     pub fn clear(rc: *RenderContext) !void {
         debug.assert(rc.term.currently_rendering);
+        log.debug("clearing terminal", .{});
         const wrtr = rc.buffer.writer();
         try wrtr.writeAll(spells.clear);
     }
@@ -209,6 +224,7 @@ pub const RenderContext = struct {
     /// Move the cursor to the specified cell.
     pub fn moveCursorTo(rc: *RenderContext, row: usize, col: usize) !void {
         debug.assert(rc.term.currently_rendering);
+        log.debug("moving cursor: row={} col={}", .{ row, col });
         const wrtr = rc.buffer.writer();
         try wrtr.print(spells.move_cursor_fmt, .{ row + 1, col + 1 });
     }
@@ -216,6 +232,7 @@ pub const RenderContext = struct {
     /// Hide the cursor.
     pub fn hideCursor(rc: *RenderContext) !void {
         debug.assert(rc.term.currently_rendering);
+        log.debug("hiding cursor", .{});
         const wrtr = rc.buffer.writer();
         try wrtr.writeAll(spells.hide_cursor);
     }
@@ -223,6 +240,7 @@ pub const RenderContext = struct {
     /// Show the cursor.
     pub fn showCursor(rc: *RenderContext) !void {
         debug.assert(rc.term.currently_rendering);
+        log.debug("showing cursor", .{});
         const wrtr = rc.buffer.writer();
         try wrtr.writeAll(spells.show_cursor);
     }
@@ -230,12 +248,14 @@ pub const RenderContext = struct {
     /// Set the text attributes for all following writes.
     pub fn setAttribute(rc: *RenderContext, attr: Attribute) !void {
         debug.assert(rc.term.currently_rendering);
+        log.debug("setting attribute: {}", .{attr});
         const wrtr = rc.buffer.writer();
         try attr.dump(wrtr);
     }
 
     pub fn restrictedPaddingWriter(rc: *RenderContext, len: usize) getRestrictedPaddingWriterType() {
         debug.assert(rc.term.currently_rendering);
+        log.debug("getting RestrictedPaddingWriter with cell-length {}", .{len});
         return rpw.restrictedPaddingWriter(rc.buffer.writer(), len);
     }
 
@@ -249,6 +269,7 @@ pub const RenderContext = struct {
     /// Write all bytes, wrapping at the end of the line.
     pub fn writeAllWrapping(rc: *RenderContext, bytes: []const u8) !void {
         debug.assert(rc.term.currently_rendering);
+        log.debug("writeAllWrapping: \"{s}\"", .{bytes});
         const wrtr = rc.buffer.writer();
         try wrtr.writeAll(spells.enable_auto_wrap);
         try wrtr.writeAll(bytes);
