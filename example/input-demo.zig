@@ -163,6 +163,8 @@ fn render() !void {
                 try writer.writeByteNTimes(' ', msg.len);
             }
 
+            var mouse: ?struct { x: usize, y: usize } = null;
+
             try writer.print("{}: ", .{i});
             switch (in.content) {
                 .codepoint => |cp| {
@@ -173,7 +175,10 @@ fn render() !void {
                     try writer.print("codepoint: {} x{X}", .{ cp, cp });
                 },
                 .function => |f| try writer.print("F{}", .{f}),
-                .mouse => |m| try writer.print("mouse {s} {} {}", .{ @tagName(m.button), m.x, m.y }),
+                .mouse => |m| {
+                    mouse = .{ .x = m.x, .y = m.y };
+                    try writer.print("mouse {s} {} {}", .{ @tagName(m.button), m.x, m.y });
+                },
                 else => try writer.writeAll(@tagName(in.content)),
             }
             if (in.mod_alt) try writer.writeAll(" +Alt");
@@ -181,6 +186,12 @@ fn render() !void {
             if (in.mod_super) try writer.writeAll(" +Super");
 
             try rpw.finish();
+
+            if (mouse) |m| {
+                try rc.moveCursorTo(m.y, m.x);
+                try rc.setAttribute(.{ .bg = .red, .bold = true });
+                try rc.buffer.writer().writeByte('X');
+            }
         }
     }
 }
