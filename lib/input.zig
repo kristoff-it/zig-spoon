@@ -283,8 +283,8 @@ const InputParser = struct {
         //   API and do it right. And no, bolting a new /optional/ API on top
         //   does not count.
         // </rant>
-        ret.content.mouse.x = b - 32 - 1;
-        ret.content.mouse.y = c - 32 - 1;
+        ret.content.mouse.x = b -| (32 + 1);
+        ret.content.mouse.y = c -| (32 + 1);
 
         self.advanceBufferBy("\x1b[Mabc".len);
         return ret;
