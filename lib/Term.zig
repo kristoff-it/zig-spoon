@@ -214,7 +214,10 @@ pub fn getRenderContext(self: *Self) !RenderContext {
 
 pub const RenderContext = struct {
     term: *Self,
-    buffer: io.BufferedWriter(4096, fs.File.Writer),
+    buffer: BufferedWriter,
+
+    const BufferedWriter = io.BufferedWriter(4096, fs.File.Writer);
+    const RestrictedPaddingWriter = rpw.RestrictedPaddingWriter(BufferedWriter.Writer);
 
     /// Finishes the render operation. The render context may not be used any
     /// further.
@@ -262,16 +265,9 @@ pub const RenderContext = struct {
         try attr.dump(wrtr);
     }
 
-    pub fn restrictedPaddingWriter(rc: *RenderContext, len: usize) getRestrictedPaddingWriterType() {
+    pub fn restrictedPaddingWriter(rc: *RenderContext, len: usize) RestrictedPaddingWriter {
         debug.assert(rc.term.currently_rendering);
         return rpw.restrictedPaddingWriter(rc.buffer.writer(), len);
-    }
-
-    // TODO there has to be a less annoying way to do this, right?
-    fn getRestrictedPaddingWriterType() type {
-        var rc: RenderContext = undefined;
-        var r = rpw.restrictedPaddingWriter(rc.buffer.writer(), 42);
-        return @TypeOf(r);
     }
 
     /// Write all bytes, wrapping at the end of the line.
