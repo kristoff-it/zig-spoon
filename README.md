@@ -25,8 +25,16 @@ for non-TUI terminal programs that still want fancy text.
 
 ## License
 
-zig-spoon is licensed under version 2.0 of the MPL.
+zig-spoon is licensed under the GPL version 3 (no later).
 
-The code of the exmaple programs in `example/` are released into the public
-domain.
+Yes, that means that any project using zig-spoon - although not necessarily
+all code - will also be licensed under the GPLv3. This should not be a problem
+for any honest FOSS project.
 
+While I recognize that licensing a  library under the GPL is unusual and poses
+restrictions on users of the library, I consider this choice necessary to ensure
+that all my code always remains Free Software and therefore always remains of
+most use to end users. I write software for people, not for companies. As such,
+I do not wish any of it being used as free labour for some proprietary project
+by a company wanting to improve their profit margins.
+Thank you for understanding.
