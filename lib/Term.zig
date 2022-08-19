@@ -193,9 +193,9 @@ pub fn setWindowTitle(self: *Self, comptime fmt: []const u8, args: anytype) !voi
     try writer.print("\x1b]2;" ++ fmt ++ "\x1b\\", args);
 }
 
-pub fn getRenderContext(self: *Self) !RenderContext {
-    debug.assert(!self.currently_rendering);
-    debug.assert(!self.cooked);
+pub fn getRenderContextSafe(self: *Self) !?RenderContext {
+    if (self.currently_rendering) return null;
+    if (self.cooked) return null;
 
     self.currently_rendering = true;
     errdefer self.currently_rendering = false;
@@ -210,6 +210,12 @@ pub fn getRenderContext(self: *Self) !RenderContext {
     try writer.writeAll(spells.reset_attributes);
 
     return rc;
+}
+
+pub fn getRenderContext(self: *Self) !RenderContext {
+    debug.assert(!self.currently_rendering);
+    debug.assert(!self.cooked);
+    return (try self.getRenderContextSafe()) orelse unreachable;
 }
 
 pub const RenderContext = struct {
