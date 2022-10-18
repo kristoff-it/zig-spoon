@@ -42,6 +42,10 @@ const AltScreenConfig = struct {
     request_mouse_tracking: bool = false,
 };
 
+const TermConfig = struct {
+    tty_name: []const u8 = "/dev/tty",
+};
+
 /// Are we in raw or cooked mode?
 cooked: bool = true,
 
@@ -59,10 +63,10 @@ tty: fs.File = undefined,
 
 // TODO options struct
 //      -> IO read mode
-pub fn init(self: *Self) !void {
+pub fn init(self: *Self, term_config: TermConfig) !void {
     self.* = .{
         .tty = try fs.cwd().openFile(
-            "/dev/tty",
+            term_config.tty_name,
             .{ .read = true, .write = true },
         ),
     };

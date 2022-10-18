@@ -28,7 +28,7 @@ pub fn main() !void {
         break :blk false;
     };
 
-    try term.init();
+    try term.init(.{});
     defer term.deinit();
 
     os.sigaction(os.SIG.WINCH, &os.Sigaction{

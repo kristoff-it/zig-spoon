@@ -12,7 +12,7 @@ var loop: bool = true;
 var cursor: usize = 0;
 
 pub fn main() !void {
-    try term.init();
+    try term.init(.{});
     defer term.deinit();
 
     os.sigaction(os.SIG.WINCH, &os.Sigaction{
