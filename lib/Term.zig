@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+const builtin = @import("builtin");
 const std = @import("std");
 const ascii = std.ascii;
 const fs = std.fs;
@@ -22,6 +23,13 @@ const mem = std.mem;
 const os = std.os;
 const unicode = std.unicode;
 const debug = std.debug;
+const math = std.math;
+
+// Workaround for bad libc integration of zigs std.
+const constants = if (builtin.link_libc) switch (builtin.os.tag) {
+    .linux => os.linux,
+    else => @compileError("patches welcome"),
+} else os.system;
 
 const Attribute = @import("Attribute.zig");
 const spells = @import("spells.zig");
@@ -95,8 +103,8 @@ pub fn uncook(self: *Self, config: AltScreenConfig) !void {
     // IEXTEN: Disable input preprocessing. This allows us to handle Ctrl-V,
     //         which would otherwise be intercepted by some terminals.
     raw.lflag &= ~@as(
-        os.system.tcflag_t,
-        os.system.ECHO | os.system.ICANON | os.system.ISIG | os.system.IEXTEN,
+        constants.tcflag_t,
+        constants.ECHO | constants.ICANON | constants.ISIG | constants.IEXTEN,
     );
 
     //   IXON: Disable software control flow. This allows us to handle Ctrl-S
@@ -110,22 +118,22 @@ pub fn uncook(self: *Self, config: AltScreenConfig) !void {
     // ISTRIP: Disable stripping the 8th bit of characters. Likely has no effect
     //         on anything remotely modern.
     raw.iflag &= ~@as(
-        os.system.tcflag_t,
-        os.system.IXON | os.system.ICRNL | os.system.BRKINT | os.system.INPCK | os.system.ISTRIP,
+        constants.tcflag_t,
+        constants.IXON | constants.ICRNL | constants.BRKINT | constants.INPCK | constants.ISTRIP,
     );
 
     // Disable output processing. Common output processing includes prefixing
     // newline with a carriage return.
-    raw.oflag &= ~@as(os.system.tcflag_t, os.system.OPOST);
+    raw.oflag &= ~@as(constants.tcflag_t, constants.OPOST);
 
     // Set the character size to 8 bits per byte. Likely has no efffect on
     // anything remotely modern.
-    raw.cflag |= os.system.CS8;
+    raw.cflag |= constants.CS8;
 
     // With these settings, the read syscall will immediately return when it
     // can't get any bytes. This allows poll to drive our loop.
-    raw.cc[os.system.V.TIME] = 0;
-    raw.cc[os.system.V.MIN] = 0;
+    raw.cc[constants.V.TIME] = 0;
+    raw.cc[constants.V.MIN] = 0;
 
     try os.tcsetattr(self.tty.handle, .FLUSH, raw);
 
@@ -177,8 +185,8 @@ pub fn cook(self: *Self) !void {
 
 pub fn fetchSize(self: *Self) !void {
     if (self.cooked) return;
-    var size = mem.zeroes(os.system.winsize);
-    const err = os.system.ioctl(self.tty.handle, os.system.T.IOCGWINSZ, @ptrToInt(&size));
+    var size = mem.zeroes(constants.winsize);
+    const err = os.system.ioctl(self.tty.handle, constants.T.IOCGWINSZ, @ptrToInt(&size));
     if (os.errno(err) != .SUCCESS) {
         return os.unexpectedErrno(@intToEnum(os.system.E, err));
     }
