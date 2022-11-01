@@ -67,7 +67,7 @@ pub fn init(self: *Self, term_config: TermConfig) !void {
     self.* = .{
         .tty = try fs.cwd().openFile(
             term_config.tty_name,
-            .{ .read = true, .write = true },
+            .{ .mode = .read_write },
         ),
     };
 }

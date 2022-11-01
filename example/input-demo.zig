@@ -31,7 +31,7 @@ pub fn main() !void {
     try term.init(.{});
     defer term.deinit();
 
-    os.sigaction(os.SIG.WINCH, &os.Sigaction{
+    try os.sigaction(os.SIG.WINCH, &os.Sigaction{
         .handler = .{ .handler = handleSigWinch },
         .mask = os.empty_sigset,
         .flags = 0,
@@ -203,8 +203,8 @@ fn handleSigWinch(_: c_int) callconv(.C) void {
 
 /// Custom panic handler, so that we can try to cook the terminal on a crash,
 /// as otherwise all messages will be mangled.
-pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
+pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
     @setCold(true);
     term.cook() catch {};
-    std.builtin.default_panic(msg, trace);
+    std.builtin.default_panic(msg, trace, ret_addr);
 }
