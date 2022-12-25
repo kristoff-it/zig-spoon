@@ -17,7 +17,6 @@
 const builtin = @import("builtin");
 const std = @import("std");
 const ascii = std.ascii;
-const fs = std.fs;
 const io = std.io;
 const mem = std.mem;
 const os = std.os;
@@ -26,10 +25,7 @@ const debug = std.debug;
 const math = std.math;
 
 // Workaround for bad libc integration of zigs std.
-const constants = if (builtin.link_libc) switch (builtin.os.tag) {
-    .linux => os.linux,
-    else => @compileError("patches welcome"),
-} else os.system;
+const constants = if (builtin.link_libc and builtin.os.tag == .linux) os.linux else os.system;
 
 const Attribute = @import("Attribute.zig");
 const spells = @import("spells.zig");
@@ -52,36 +48,44 @@ cooked: bool = true,
 /// The original termios configuration saved when entering raw mode.
 cooked_termios: os.termios = undefined,
 
-/// Size of the terminal, updated when SIGWINCH is received.
+/// Size of the terminal, updated fetchSize() is called.
 width: usize = undefined,
 height: usize = undefined,
 
 /// Are we currently rendering?
 currently_rendering: bool = false,
 
-tty: fs.File = undefined,
+/// Descriptor of opened file.
+tty: os.fd_t = undefined,
 
-// TODO options struct
-//      -> IO read mode
+/// Dumb writer. Don't use.
+const Writer = io.Writer(os.fd_t, os.WriteError, os.write);
+fn writer(self: Self) Writer {
+    return .{ .context = self.tty };
+}
+
+/// Buffered writer. Use.
+const BufferedWriter = io.BufferedWriter(4096, Writer);
+fn bufferedWriter(self: Self) BufferedWriter {
+    return io.bufferedWriter(self.writer());
+}
+
 pub fn init(self: *Self, term_config: TermConfig) !void {
     self.* = .{
-        .tty = try fs.cwd().openFile(
-            term_config.tty_name,
-            .{ .mode = .read_write },
-        ),
+        .tty = try os.open(term_config.tty_name, constants.O.RDWR, 0),
     };
 }
 
 pub fn deinit(self: *Self) void {
     debug.assert(!self.currently_rendering);
     debug.assert(self.cooked);
-    self.tty.close();
+    os.close(self.tty);
 }
 
 pub fn readInput(self: *Self, buffer: []u8) !usize {
     debug.assert(!self.currently_rendering);
     debug.assert(!self.cooked);
-    return try self.tty.read(buffer);
+    return try os.read(self.tty, buffer);
 }
 
 /// Enter raw mode.
@@ -94,7 +98,7 @@ pub fn uncook(self: *Self, config: AltScreenConfig) !void {
     // https://viewsourcecode.org/snaptoken/kilo/02.enteringRawMode.html.
     // TODO: IUTF8 ?
 
-    self.cooked_termios = try os.tcgetattr(self.tty.handle);
+    self.cooked_termios = try os.tcgetattr(self.tty);
     errdefer self.cook() catch {};
 
     var raw = self.cooked_termios;
@@ -139,11 +143,11 @@ pub fn uncook(self: *Self, config: AltScreenConfig) !void {
     raw.cc[constants.V.TIME] = 0;
     raw.cc[constants.V.MIN] = 0;
 
-    try os.tcsetattr(self.tty.handle, .FLUSH, raw);
+    try os.tcsetattr(self.tty, .FLUSH, raw);
 
-    var bufwriter = io.bufferedWriter(self.tty.writer());
-    const writer = bufwriter.writer();
-    try writer.writeAll(
+    var bufwriter = self.bufferedWriter();
+    const wrtr = bufwriter.writer();
+    try wrtr.writeAll(
         spells.save_cursor_position ++
             spells.save_cursor_position ++
             spells.enter_alt_buffer ++
@@ -154,10 +158,10 @@ pub fn uncook(self: *Self, config: AltScreenConfig) !void {
             spells.hide_cursor,
     );
     if (config.request_kitty_keyboard_protocol) {
-        try writer.writeAll(spells.enable_kitty_keyboard);
+        try wrtr.writeAll(spells.enable_kitty_keyboard);
     }
     if (config.request_mouse_tracking) {
-        try writer.writeAll(spells.enable_mouse_tracking);
+        try wrtr.writeAll(spells.enable_mouse_tracking);
     }
     try bufwriter.flush();
 }
@@ -167,9 +171,9 @@ pub fn cook(self: *Self) !void {
     if (self.cooked) return;
     self.cooked = true;
 
-    var bufwriter = io.bufferedWriter(self.tty.writer());
-    const writer = bufwriter.writer();
-    try writer.writeAll(
+    var bufwriter = self.bufferedWriter();
+    const wrtr = bufwriter.writer();
+    try wrtr.writeAll(
         // Even if we did not request the kitty keyboard protocol or mouse
         // tracking, asking the terminal to disable it should have no effect.
         spells.disable_kitty_keyboard ++
@@ -184,13 +188,13 @@ pub fn cook(self: *Self) !void {
     );
     try bufwriter.flush();
 
-    try os.tcsetattr(self.tty.handle, .FLUSH, self.cooked_termios);
+    try os.tcsetattr(self.tty, .FLUSH, self.cooked_termios);
 }
 
 pub fn fetchSize(self: *Self) !void {
     if (self.cooked) return;
     var size = mem.zeroes(constants.winsize);
-    const err = os.system.ioctl(self.tty.handle, constants.T.IOCGWINSZ, @ptrToInt(&size));
+    const err = os.system.ioctl(self.tty, constants.T.IOCGWINSZ, @ptrToInt(&size));
     if (os.errno(err) != .SUCCESS) {
         return os.unexpectedErrno(@intToEnum(os.system.E, err));
     }
@@ -201,8 +205,8 @@ pub fn fetchSize(self: *Self) !void {
 /// Set window title using OSC 2. Shall not be called while rendering.
 pub fn setWindowTitle(self: *Self, comptime fmt: []const u8, args: anytype) !void {
     debug.assert(!self.currently_rendering);
-    const writer = self.tty.writer();
-    try writer.print("\x1b]2;" ++ fmt ++ "\x1b\\", args);
+    const wrtr = self.writer();
+    try wrtr.print("\x1b]2;" ++ fmt ++ "\x1b\\", args);
 }
 
 pub fn getRenderContextSafe(self: *Self) !?RenderContext {
@@ -214,12 +218,12 @@ pub fn getRenderContextSafe(self: *Self) !?RenderContext {
 
     var rc = RenderContext{
         .term = self,
-        .buffer = io.bufferedWriter(self.tty.writer()),
+        .buffer = self.bufferedWriter(),
     };
 
-    const writer = rc.buffer.writer();
-    try writer.writeAll(spells.start_sync);
-    try writer.writeAll(spells.reset_attributes);
+    const wrtr = rc.buffer.writer();
+    try wrtr.writeAll(spells.start_sync);
+    try wrtr.writeAll(spells.reset_attributes);
 
     return rc;
 }
@@ -234,7 +238,6 @@ pub const RenderContext = struct {
     term: *Self,
     buffer: BufferedWriter,
 
-    const BufferedWriter = io.BufferedWriter(4096, fs.File.Writer);
     const RestrictedPaddingWriter = rpw.RestrictedPaddingWriter(BufferedWriter.Writer);
 
     /// Finishes the render operation. The render context may not be used any

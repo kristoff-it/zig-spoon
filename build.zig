@@ -20,6 +20,15 @@ pub fn build(b: *Builder) void {
     }
 
     {
+        const exe = b.addExecutable("menu-libc", "example/menu.zig");
+        exe.setTarget(target);
+        exe.setBuildMode(mode);
+        exe.addPackagePath("spoon", "import.zig");
+        exe.linkLibC();
+        exe.install();
+    }
+
+    {
         const exe = b.addExecutable("input-demo", "example/input-demo.zig");
         exe.setTarget(target);
         exe.setBuildMode(mode);

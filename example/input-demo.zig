@@ -39,7 +39,7 @@ pub fn main() !void {
 
     var fds: [1]os.pollfd = undefined;
     fds[0] = .{
-        .fd = term.tty.handle,
+        .fd = term.tty,
         .events = os.POLL.IN,
         .revents = undefined,
     };
