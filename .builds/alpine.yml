@@ -10,6 +10,9 @@ tasks:
       tar -xvf zig-linux-x86_64-0.9.1.tar.xz 1>/dev/null
       sudo mv zig-linux-x86_64-0.9.1/zig /usr/bin/
       sudo mv zig-linux-x86_64-0.9.1/lib /usr/lib/zig
+  - build: |
+      cd zig-spoon
+      zig build
   - test: |
       cd zig-spoon
       zig build test
