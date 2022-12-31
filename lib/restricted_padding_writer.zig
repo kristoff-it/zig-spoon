@@ -39,6 +39,8 @@ const CodepointStagingArea = struct {
         return ret;
     }
 
+    /// Add a byte to the staging area. Returns true if the codepoint has been
+    /// completed by that byte, otherwise false.
     pub fn addByte(self: *Self, b: u8) bool {
         debug.assert(self.left > 0);
         self.buf[self.len - self.left] = b;
@@ -101,38 +103,68 @@ pub fn RestrictedPaddingWriter(comptime UnderlyingWriter: type) type {
 
         pub fn write(self: *Self, bytes: []const u8) WriteError!usize {
             if (self.codepoint_holding_area) |_| {
+                // The holding area is only for the last codepoint on our line,
+                // which we hold because we only know whether to write it based
+                // on whether any codepoints come after it. As such, it is only
+                // active when we only have a single character left on the line.
                 debug.assert(self.len_left == 1);
+
+                // Since this function has been called, there come bytes after
+                // the codepoint we currently hold. As such, it will not get
+                // written, instead we write '…' and return.
                 self.codepoint_holding_area = null;
                 self.len_left = 0;
                 try self.underlying_writer.writeAll("…");
                 return bytes.len;
             }
 
-            if (self.len_left == 0) {
-                return bytes.len;
-            }
-
             for (bytes) |c, i| {
                 if (self.len_left == 0) break;
 
+                // If we are building up a codepoint right now, just add the
+                // byte, try to write and finally continue.
                 if (self.codepoint_staging_area) |_| {
                     if (self.codepoint_staging_area.?.addByte(c)) {
                         try self.maybeWriteCodepointStagingArea(bytes.len - i - 1);
                     }
+                    continue;
+                }
+
+                // We do not want invalid unicode to end up in our output.
+                const utf8len = unicode.utf8ByteSequenceLength(c) catch {
+                    try self.writeError(bytes.len - i - 1);
+                    continue;
+                };
+
+                // If the codepoint is only one byte long, we can try to print
+                // it immediately. Otherwise we need to hold on to the byte and
+                // build up the full codepoint over time.
+                if (utf8len == 1) {
+                    try self.maybeWriteByte(c, bytes.len - i - 1);
                 } else {
-                    const utf8len = unicode.utf8ByteSequenceLength(c) catch {
-                        try self.maybeWriteByte('?', bytes.len - i - 1);
-                        continue;
-                    };
-                    if (utf8len == 1) {
-                        try self.maybeWriteByte(c, bytes.len - i - 1);
-                    } else {
-                        self.codepoint_staging_area = CodepointStagingArea.new(c, utf8len);
-                    }
+                    self.codepoint_staging_area = CodepointStagingArea.new(c, utf8len);
                 }
             }
 
             return bytes.len;
+        }
+
+        fn writeError(self: *Self, remaining_bytes_len: usize) !void {
+            debug.assert(self.len_left > 0);
+            const err_symbol = "�";
+            debug.assert(err_symbol.len == 3);
+            if (self.len_left > 1) {
+                try self.underlying_writer.writeAll(err_symbol);
+                self.len_left -= 1;
+            } else if (remaining_bytes_len > 0) {
+                try self.underlying_writer.writeAll("…");
+                self.len_left -= 1;
+            } else {
+                self.codepoint_staging_area = null;
+                self.codepoint_holding_area = CodepointStagingArea.new(err_symbol[0], err_symbol.len);
+                _ = self.codepoint_holding_area.?.addByte(err_symbol[1]);
+                _ = self.codepoint_holding_area.?.addByte(err_symbol[2]);
+            }
         }
 
         fn maybeWriteCodepointStagingArea(self: *Self, remaining_bytes_len: usize) !void {
@@ -141,31 +173,36 @@ pub fn RestrictedPaddingWriter(comptime UnderlyingWriter: type) type {
                 try self.underlying_writer.writeAll(self.codepoint_staging_area.?.bytes());
                 self.codepoint_staging_area = null;
                 self.len_left -= 1;
+            } else if (remaining_bytes_len > 0) {
+                try self.underlying_writer.writeAll("…");
+                self.codepoint_staging_area = null;
+                self.len_left -= 1;
             } else {
-                if (remaining_bytes_len > 0) {
-                    try self.underlying_writer.writeAll("…");
-                    self.codepoint_staging_area = null;
-                    self.len_left -= 1;
-                } else {
-                    self.codepoint_holding_area = self.codepoint_staging_area;
-                    self.codepoint_staging_area = null;
-                }
+                self.codepoint_holding_area = self.codepoint_staging_area;
+                self.codepoint_staging_area = null;
             }
         }
 
         fn maybeWriteByte(self: *Self, b: u8, remaining_bytes_len: usize) !void {
             debug.assert(self.len_left > 0);
+
+            // We do not want to end up with control characters in our output,
+            // as they potentially can mess up what we try to write to the
+            // terminal.
+            if (ascii.isControl(b)) {
+                try self.writeError(remaining_bytes_len);
+                return;
+            }
+
             const byte = if (b == '\n' or b == '\t' or b == '\r' or b == ' ') ' ' else b;
             if (self.len_left > 1) {
                 try self.underlying_writer.writeByte(byte);
                 self.len_left -= 1;
+            } else if (remaining_bytes_len > 0) {
+                try self.underlying_writer.writeAll("…");
+                self.len_left -= 1;
             } else {
-                if (remaining_bytes_len > 0) {
-                    try self.underlying_writer.writeAll("…");
-                    self.len_left -= 1;
-                } else {
-                    self.codepoint_holding_area = CodepointStagingArea.new(byte, 1);
-                }
+                self.codepoint_holding_area = CodepointStagingArea.new(byte, 1);
             }
         }
     };
