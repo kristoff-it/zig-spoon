@@ -23,13 +23,14 @@ pub fn main() !void {
 
     var fds: [1]os.pollfd = undefined;
     fds[0] = .{
-        .fd = term.tty,
+        .fd = term.tty.?,
         .events = os.POLL.IN,
         .revents = undefined,
     };
 
+    // zig-spoon will return the terminal back to cooked state automatically
+    // when we call term.deinit().
     try term.uncook(.{});
-    defer term.cook() catch {};
 
     try term.fetchSize();
     try term.setWindowTitle("zig-spoon example: menu", .{});

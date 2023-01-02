@@ -56,12 +56,12 @@ height: usize = undefined,
 currently_rendering: bool = false,
 
 /// Descriptor of opened file.
-tty: os.fd_t = undefined,
+tty: ?os.fd_t = null,
 
 /// Dumb writer. Don't use.
 const Writer = io.Writer(os.fd_t, os.WriteError, os.write);
 fn writer(self: Self) Writer {
-    return .{ .context = self.tty };
+    return .{ .context = self.tty.? };
 }
 
 /// Buffered writer. Use.
@@ -71,6 +71,8 @@ fn bufferedWriter(self: Self) BufferedWriter {
 }
 
 pub fn init(self: *Self, term_config: TermConfig) !void {
+    // Only allow a single successful call to init.
+    debug.assert(self.tty == null);
     self.* = .{
         .tty = try os.open(term_config.tty_name, constants.O.RDWR, 0),
     };
@@ -78,18 +80,29 @@ pub fn init(self: *Self, term_config: TermConfig) !void {
 
 pub fn deinit(self: *Self) void {
     debug.assert(!self.currently_rendering);
-    debug.assert(self.cooked);
-    os.close(self.tty);
+
+    // Allow multiple calls to deinit, even if init never succeeded. This makes
+    // application logic slightly simpler.
+    if (self.tty == null) return;
+
+    // It's probably a good idea to cook the terminal on exit.
+    if (!self.cooked) self.cook() catch {};
+
+    os.close(self.tty.?);
+    self.tty = null;
 }
 
 pub fn readInput(self: *Self, buffer: []u8) !usize {
+    debug.assert(self.tty != null);
     debug.assert(!self.currently_rendering);
     debug.assert(!self.cooked);
-    return try os.read(self.tty, buffer);
+    return try os.read(self.tty.?, buffer);
 }
 
 /// Enter raw mode.
 pub fn uncook(self: *Self, config: AltScreenConfig) !void {
+    debug.assert(self.tty != null);
+
     if (!self.cooked) return;
     self.cooked = false;
 
@@ -98,7 +111,7 @@ pub fn uncook(self: *Self, config: AltScreenConfig) !void {
     // https://viewsourcecode.org/snaptoken/kilo/02.enteringRawMode.html.
     // TODO: IUTF8 ?
 
-    self.cooked_termios = try os.tcgetattr(self.tty);
+    self.cooked_termios = try os.tcgetattr(self.tty.?);
     errdefer self.cook() catch {};
 
     var raw = self.cooked_termios;
@@ -143,7 +156,7 @@ pub fn uncook(self: *Self, config: AltScreenConfig) !void {
     raw.cc[constants.V.TIME] = 0;
     raw.cc[constants.V.MIN] = 0;
 
-    try os.tcsetattr(self.tty, .FLUSH, raw);
+    try os.tcsetattr(self.tty.?, .FLUSH, raw);
 
     var bufwriter = self.bufferedWriter();
     const wrtr = bufwriter.writer();
@@ -168,6 +181,8 @@ pub fn uncook(self: *Self, config: AltScreenConfig) !void {
 
 /// Enter cooked mode.
 pub fn cook(self: *Self) !void {
+    debug.assert(self.tty != null);
+
     if (self.cooked) return;
     self.cooked = true;
 
@@ -188,13 +203,15 @@ pub fn cook(self: *Self) !void {
     );
     try bufwriter.flush();
 
-    try os.tcsetattr(self.tty, .FLUSH, self.cooked_termios);
+    try os.tcsetattr(self.tty.?, .FLUSH, self.cooked_termios);
 }
 
 pub fn fetchSize(self: *Self) !void {
+    debug.assert(self.tty != null);
+
     if (self.cooked) return;
     var size = mem.zeroes(constants.winsize);
-    const err = os.system.ioctl(self.tty, constants.T.IOCGWINSZ, @ptrToInt(&size));
+    const err = os.system.ioctl(self.tty.?, constants.T.IOCGWINSZ, @ptrToInt(&size));
     if (os.errno(err) != .SUCCESS) {
         return os.unexpectedErrno(@intToEnum(os.system.E, err));
     }
@@ -204,12 +221,14 @@ pub fn fetchSize(self: *Self) !void {
 
 /// Set window title using OSC 2. Shall not be called while rendering.
 pub fn setWindowTitle(self: *Self, comptime fmt: []const u8, args: anytype) !void {
+    debug.assert(self.tty != null);
     debug.assert(!self.currently_rendering);
     const wrtr = self.writer();
     try wrtr.print("\x1b]2;" ++ fmt ++ "\x1b\\", args);
 }
 
 pub fn getRenderContextSafe(self: *Self) !?RenderContext {
+    debug.assert(self.tty != null);
     if (self.currently_rendering) return null;
     if (self.cooked) return null;
 
@@ -229,6 +248,7 @@ pub fn getRenderContextSafe(self: *Self) !?RenderContext {
 }
 
 pub fn getRenderContext(self: *Self) !RenderContext {
+    debug.assert(self.tty != null);
     debug.assert(!self.currently_rendering);
     debug.assert(!self.cooked);
     return (try self.getRenderContextSafe()) orelse unreachable;

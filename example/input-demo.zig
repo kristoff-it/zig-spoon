@@ -39,7 +39,7 @@ pub fn main() !void {
 
     var fds: [1]os.pollfd = undefined;
     fds[0] = .{
-        .fd = term.tty,
+        .fd = term.tty.?,
         .events = os.POLL.IN,
         .revents = undefined,
     };
@@ -48,7 +48,6 @@ pub fn main() !void {
         .request_kitty_keyboard_protocol = !force_legacy,
         .request_mouse_tracking = mouse,
     });
-    defer term.cook() catch {};
 
     try term.fetchSize();
     try term.setWindowTitle("zig-spoon example: input-demo", .{});
