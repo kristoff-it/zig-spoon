@@ -95,7 +95,7 @@ fn render() !void {
     try rpw.writer().writeAll(" Up and Down arrows to select, q to exit.");
     try rpw.finish(); // No need to pad here, since there is no background.
 
-    const entry_width = math.min(term.width - 2, 8);
+    const entry_width = @min(term.width - 2, 8);
     try menuEntry(&rc, " foo", 3, entry_width);
     try menuEntry(&rc, " bar", 4, entry_width);
     try menuEntry(&rc, " baz", 5, entry_width);
