@@ -84,4 +84,17 @@ pub fn build(b: *Builder) !void {
         exe.addModule("spoon", spoon_mod);
         b.installArtifact(exe);
     }
+
+    {
+        const exe = b.addExecutable(
+            .{
+                .name = "terminfo",
+                .root_source_file = .{ .path = "example/terminfo.zig" },
+                .target = target,
+                .optimize = optimize,
+            },
+        );
+        exe.addModule("spoon", spoon_mod);
+        b.installArtifact(exe);
+    }
 }
