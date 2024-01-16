@@ -27,7 +27,7 @@ pub fn build(b: *std.Build) !void {
                 .optimize = optimize,
             },
         );
-        exe.addImport("spoon", spoon_mod);
+        exe.root_module.addImport("spoon", spoon_mod);
         b.installArtifact(exe);
     }
 
@@ -40,7 +40,7 @@ pub fn build(b: *std.Build) !void {
                 .optimize = optimize,
             },
         );
-        exe.addImport("spoon", spoon_mod);
+        exe.root_module.addImport("spoon", spoon_mod);
         exe.linkLibC();
         b.installArtifact(exe);
     }
@@ -54,7 +54,7 @@ pub fn build(b: *std.Build) !void {
                 .optimize = optimize,
             },
         );
-        exe.addImport("spoon", spoon_mod);
+        exe.root_module.addImport("spoon", spoon_mod);
         b.installArtifact(exe);
     }
 
@@ -67,7 +67,7 @@ pub fn build(b: *std.Build) !void {
                 .optimize = optimize,
             },
         );
-        exe.addImport("spoon", spoon_mod);
+        exe.root_module.addImport("spoon", spoon_mod);
         b.installArtifact(exe);
     }
 
@@ -80,7 +80,7 @@ pub fn build(b: *std.Build) !void {
                 .optimize = optimize,
             },
         );
-        exe.addImport("spoon", spoon_mod);
+        exe.root_module.addImport("spoon", spoon_mod);
         b.installArtifact(exe);
     }
 }
