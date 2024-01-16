@@ -1,12 +1,11 @@
 const std = @import("std");
-const Builder = std.build.Builder;
 
-pub fn build(b: *Builder) !void {
+pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
     const spoon_mod = b.addModule("spoon", .{
-        .source_file = .{ .path = "import.zig" },
+        .root_source_file = .{ .path = "import.zig" },
     });
 
     const tests = b.addTest(
@@ -28,7 +27,7 @@ pub fn build(b: *Builder) !void {
                 .optimize = optimize,
             },
         );
-        exe.addModule("spoon", spoon_mod);
+        exe.addImport("spoon", spoon_mod);
         b.installArtifact(exe);
     }
 
@@ -41,7 +40,7 @@ pub fn build(b: *Builder) !void {
                 .optimize = optimize,
             },
         );
-        exe.addModule("spoon", spoon_mod);
+        exe.addImport("spoon", spoon_mod);
         exe.linkLibC();
         b.installArtifact(exe);
     }
@@ -55,7 +54,7 @@ pub fn build(b: *Builder) !void {
                 .optimize = optimize,
             },
         );
-        exe.addModule("spoon", spoon_mod);
+        exe.addImport("spoon", spoon_mod);
         b.installArtifact(exe);
     }
 
@@ -68,7 +67,7 @@ pub fn build(b: *Builder) !void {
                 .optimize = optimize,
             },
         );
-        exe.addModule("spoon", spoon_mod);
+        exe.addImport("spoon", spoon_mod);
         b.installArtifact(exe);
     }
 
@@ -81,7 +80,7 @@ pub fn build(b: *Builder) !void {
                 .optimize = optimize,
             },
         );
-        exe.addModule("spoon", spoon_mod);
+        exe.addImport("spoon", spoon_mod);
         b.installArtifact(exe);
     }
 }
